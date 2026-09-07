@@ -77,7 +77,7 @@ export async function registerSpin(input: RegisterSpinInput): Promise<RegisterSp
     const existing = spins[0];
     if (existing?.token) {
       await adminDb.transact(adminDb.tx.spins[existing.id].update({ name, phone, extraFields }));
-      return { ok: true, token: existing.token, loginUrl: buildLoginUrl(existing.token, companySlug) };
+      return { ok: true, token: existing.token, loginUrl: buildLoginUrl(existing.token, companySlug, offerId) };
     }
     // Stale/invalid token — fall through to the normal lookup-or-create flow.
   }
@@ -94,11 +94,11 @@ export async function registerSpin(input: RegisterSpinInput): Promise<RegisterSp
   if (existing.spins.length > 0) {
     const prev = existing.spins[0];
     if (prev.token) {
-      return { ok: true, token: prev.token, loginUrl: buildLoginUrl(prev.token, companySlug) };
+      return { ok: true, token: prev.token, loginUrl: buildLoginUrl(prev.token, companySlug, offerId) };
     }
     const token = generateToken();
     await adminDb.transact(adminDb.tx.spins[prev.id].update({ token }));
-    return { ok: true, token, loginUrl: buildLoginUrl(token, companySlug) };
+    return { ok: true, token, loginUrl: buildLoginUrl(token, companySlug, offerId) };
   }
 
   const token = generateToken();
@@ -125,7 +125,7 @@ export async function registerSpin(input: RegisterSpinInput): Promise<RegisterSp
     });
     const prev = afterRace.spins[0];
     if (prev?.token) {
-      return { ok: true, token: prev.token, loginUrl: buildLoginUrl(prev.token, companySlug) };
+      return { ok: true, token: prev.token, loginUrl: buildLoginUrl(prev.token, companySlug, offerId) };
     }
     return { ok: false, status: 500, error: "server_error", message: "Something went wrong. Please try again." };
   }
@@ -137,5 +137,5 @@ export async function registerSpin(input: RegisterSpinInput): Promise<RegisterSp
     registration: { id: spinId, name, phone, extraFields, createdAt },
   });
 
-  return { ok: true, token, loginUrl: buildLoginUrl(token, companySlug) };
+  return { ok: true, token, loginUrl: buildLoginUrl(token, companySlug, offerId) };
 }

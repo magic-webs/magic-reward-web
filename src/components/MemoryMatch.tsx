@@ -16,6 +16,7 @@ import {
   unlockAudio,
 } from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
+import { buildGameHref } from "@/lib/siteUrl";
 
 type SpinResult = {
   prize: WheelPrize;
@@ -123,7 +124,7 @@ export default function MemoryMatch({
   }
 
   const registerUrl = companySlug ? `/api/w/${companySlug}/register` : "/api/register";
-  const gameHref = (token: string) => (companySlug ? `/w/${companySlug}?t=${token}` : `/?t=${token}`);
+  const gameHref = (token: string) => buildGameHref(companySlug, offerId, token);
 
   const [phase, setPhase] = useState<Phase>(tokenParam ? "loading" : "register");
   const [token, setToken] = useState<string | null>(null);
@@ -168,7 +169,7 @@ export default function MemoryMatch({
         const data = await res.json();
         if (cancelled) return;
         if (!res.ok) {
-          router.replace("/");
+          router.replace(buildGameHref(companySlug, offerId));
           setPhase("register");
           return;
         }

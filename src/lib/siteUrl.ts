@@ -6,11 +6,28 @@ export function getSiteUrl() {
   return (configured ?? "http://localhost:3000").replace(/\/+$/, "");
 }
 
-// A falsy `companySlug` keeps the original global magic-link shape
-// (`/?t=<token>`) so existing production links never break; a company
-// slug namespaces the link under `/w/<slug>` for every other company.
-export function buildLoginUrl(token: string, companySlug?: string | null) {
-  return companySlug
-    ? `${getSiteUrl()}/w/${companySlug}?t=${token}`
-    : `${getSiteUrl()}/?t=${token}`;
+// The site-relative URL of a game page. Carrying `o` matters: without it
+// the page re-resolves through getPublicWheelConfig, which falls back to
+// the company's newest active offer — so a visitor who registered on one
+// game gets redirected into a different one.
+//
+// A falsy `companySlug` keeps the original global shape (`/?t=<token>`) so
+// existing production links never break; a slug namespaces the link under
+// `/w/<slug>` for every other company.
+export function buildGameHref(
+  companySlug?: string | null,
+  offerId?: string | null,
+  token?: string | null,
+) {
+  const params = new URLSearchParams();
+  if (offerId) params.set("o", offerId);
+  if (token) params.set("t", token);
+
+  const base = companySlug ? `/w/${companySlug}` : "/";
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+export function buildLoginUrl(token: string, companySlug?: string | null, offerId?: string | null) {
+  return `${getSiteUrl()}${buildGameHref(companySlug, offerId, token)}`;
 }

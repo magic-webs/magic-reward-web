@@ -18,6 +18,7 @@ import { Pointer } from "lucide-react";
 import { playNoWinSound, playScratchSound, playWinSound, unlockAudio } from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
 import confettiAnimation from "../../public/lottie-animation/coffeti.json";
+import { buildGameHref } from "@/lib/siteUrl";
 
 const CARD_WIDTH = 320;
 const CARD_HEIGHT = 180;
@@ -71,7 +72,7 @@ export default function ScratchCard({
   }
 
   const registerUrl = companySlug ? `/api/w/${companySlug}/register` : "/api/register";
-  const gameHref = (token: string) => (companySlug ? `/w/${companySlug}?t=${token}` : `/?t=${token}`);
+  const gameHref = (token: string) => buildGameHref(companySlug, offerId, token);
 
   const [phase, setPhase] = useState<Phase>(tokenParam ? "loading" : "register");
   const [token, setToken] = useState<string | null>(null);
@@ -106,7 +107,7 @@ export default function ScratchCard({
         const data = await res.json();
         if (cancelled) return;
         if (!res.ok) {
-          router.replace("/");
+          router.replace(buildGameHref(companySlug, offerId));
           setPhase("register");
           return;
         }

@@ -17,6 +17,7 @@ import { GiftBoxIcon, PrizeBadge } from "@/components/game-icons";
 import { playNoWinSound, playSpinSound, playWinSound, unlockAudio } from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
 import confettiAnimation from "../../public/lottie-animation/coffeti.json";
+import { buildGameHref } from "@/lib/siteUrl";
 
 const WHEEL_SIZE = 320;
 const SPIN_DURATION_MS = 4200;
@@ -96,7 +97,7 @@ export default function SpinWheel({
   }
 
   const registerUrl = companySlug ? `/api/w/${companySlug}/register` : "/api/register";
-  const wheelHref = (token: string) => (companySlug ? `/w/${companySlug}?t=${token}` : `/?t=${token}`);
+  const wheelHref = (token: string) => buildGameHref(companySlug, offerId, token);
 
   const [phase, setPhase] = useState<Phase>(tokenParam ? "loading" : "register");
   const [token, setToken] = useState<string | null>(null);
@@ -128,7 +129,7 @@ export default function SpinWheel({
         const data = await res.json();
         if (cancelled) return;
         if (!res.ok) {
-          router.replace("/");
+          router.replace(buildGameHref(companySlug, offerId));
           setPhase("register");
           return;
         }
