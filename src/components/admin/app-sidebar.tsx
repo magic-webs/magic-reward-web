@@ -41,7 +41,7 @@ export function AppSidebar() {
                 className="size-8 shrink-0"
               />
               <div className="flex flex-col leading-tight">
-                <span className="font-heading text-sm font-semibold">Magic Win</span>
+                <span className="font-heading text-sm font-semibold">Magic Reward</span>
                 <span className="text-xs text-muted-foreground">Admin</span>
               </div>
             </SidebarMenuButton>

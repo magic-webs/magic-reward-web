@@ -229,7 +229,7 @@ export default function WebhooksPage() {
                 <div key={row.id ?? `new-${i}`} className="space-y-4 rounded-xl border p-4">
                   <div className="flex flex-wrap items-center gap-3">
                     <Input
-                      placeholder="https://example.com/hooks/magic-win"
+                      placeholder="https://example.com/hooks/magic-reward"
                       value={row.url}
                       onChange={(e) => updateRow(i, { url: e.target.value })}
                       className="min-w-60 flex-1 font-mono text-xs"

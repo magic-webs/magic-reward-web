@@ -28,7 +28,7 @@ export const socialLinks = [
 ] as const;
 
 export const product = {
-  name: "Magic Win",
+  name: "Magic Reward",
   tagline: "Spin-to-win campaigns that turn footfall into customers.",
   description:
     "Run branded prize wheels on any device. Set your own artwork, control the odds, collect the details you need, and watch every spin land in your dashboard in real time.",

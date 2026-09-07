@@ -109,7 +109,7 @@ export async function deliverWebhook(params: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "MagicWin-Webhooks/1",
+        "User-Agent": "MagicReward-Webhooks/1",
         "X-Magic-Event": envelope.event,
         "X-Magic-Delivery": envelope.id,
         "X-Magic-Timestamp": String(timestamp),

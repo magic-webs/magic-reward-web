@@ -114,7 +114,7 @@ export function buildSamplePayload(
 export function sampleHeaders(event: WebhookEventId) {
   return {
     "Content-Type": "application/json",
-    "User-Agent": "MagicWin-Webhooks/1",
+    "User-Agent": "MagicReward-Webhooks/1",
     "X-Magic-Event": event,
     "X-Magic-Delivery": "evt_sample000000000000",
     "X-Magic-Timestamp": String(SAMPLE_TIMESTAMP),
