@@ -2,13 +2,19 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lottie } from "lottie-react";
 import { type WheelFormField, type WheelPrize } from "@/lib/wheel";
 import { firstAnswerProblem } from "@/lib/formFields";
 import PlayerFormFields from "@/components/PlayerFormFields";
-import { playSlotSpinSound, playWinSound, unlockAudio } from "@/lib/sound";
+import PrizeResultModal from "@/components/PrizeResultModal";
+import { SLOT_JACKPOT_ID, SLOT_SYMBOLS, slotSymbol } from "@/components/game-icons";
+import {
+  playNoWinSound,
+  playReelStopSound,
+  playSlotSpinSound,
+  playWinSound,
+  unlockAudio,
+} from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
-import confettiAnimation from "../../public/lottie-animation/coffeti.json";
 
 type SpinResult = {
   prize: WheelPrize;
@@ -30,7 +36,35 @@ export interface SlotMachineProps {
   formFields: WheelFormField[];
 }
 
-const EMOJIS = ["🍒", "🍋", "🍊", "🍇", "🔔", "💎", "🍀", "👑"];
+// Reels hold symbol ids; the artwork lives in game-icons.tsx.
+const SYMBOL_IDS = SLOT_SYMBOLS.map((symbol) => symbol.id);
+
+function randomSymbolId(exclude?: string) {
+  const pool = exclude ? SYMBOL_IDS.filter((id) => id !== exclude) : SYMBOL_IDS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// How long the reels tumble before the first one stops, and how much
+// longer each reel to its right keeps going.
+const REEL_SPIN_MS = 1400;
+const REEL_STOP_STAGGER_MS = 320;
+const SPIN_TOTAL_MS = REEL_SPIN_MS + 2 * REEL_STOP_STAGGER_MS;
+
+// One reel window. While the reel is turning the symbol blurs and slides;
+// on landing it snaps still, which reads as the reel locking in.
+function ReelWindow({ symbolId, spinning }: { symbolId: string; spinning: boolean }) {
+  const { Icon, className } = slotSymbol(symbolId);
+  return (
+    <div className="flex h-20 w-16 items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-gradient-to-b from-white to-neutral-200 shadow-inner">
+      <Icon
+        className={`size-9 ${className} ${
+          spinning ? "animate-[reel-spin_0.18s_linear_infinite] blur-[1px]" : ""
+        }`}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
 
 export default function SlotMachine({
   companySlug,
@@ -76,7 +110,9 @@ export default function SlotMachine({
   const [showModal, setShowModal] = useState(false);
 
   // Reels state
-  const [reels, setReels] = useState<string[]>(["🍒", "🍒", "🍒"]);
+  const [reels, setReels] = useState<string[]>([SYMBOL_IDS[0], SYMBOL_IDS[1], SYMBOL_IDS[2]]);
+  // Reels stop left to right, so each needs its own spinning flag.
+  const [reelsSpinning, setReelsSpinning] = useState<boolean[]>([false, false, false]);
 
   // Hydrate session on load if magic code token exists
   useEffect(() => {
@@ -95,9 +131,12 @@ export default function SlotMachine({
         setSessionName(data.name);
         setToken(tokenParam);
         if (data.hasSpun) {
-          setResult({ prize: resolvePrize(data.prizeId, data.prizeLabel), alreadySpun: true });
-          // Set reels to win alignment
-          setReels(["💎", "💎", "💎"]);
+          const priorPrize = resolvePrize(data.prizeId, data.prizeLabel);
+          setResult({ prize: priorPrize, alreadySpun: true });
+          // Show the reels as they would have landed: three of a kind only
+          // if that earlier spin actually won something.
+          const pairId = priorPrize.isWin ? SLOT_JACKPOT_ID : randomSymbolId();
+          setReels([pairId, pairId, priorPrize.isWin ? pairId : randomSymbolId(pairId)]);
           setPhase("ready");
         } else {
           setName(data.name ?? "");
@@ -164,7 +203,6 @@ export default function SlotMachine({
 
     // Audio Unlock
     unlockAudio();
-    playSlotSpinSound(3000);
     setSpinning(true);
     setSubmitting(true);
 
@@ -188,27 +226,38 @@ export default function SlotMachine({
       const activePrize = resolvePrize(data.prizeId);
       const won = activePrize.isWin;
 
-      // Animate reels spinning
-      let count = 0;
-      const interval = setInterval(() => {
-        setReels([
-          EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-          EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-          EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-        ]);
-        count++;
-        if (count > 25) {
-          clearInterval(interval);
-          // Final landing reels match win status
-          const finalIcon = won ? "💎" : EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
-          const thirdIcon = won ? "💎" : EMOJIS[(EMOJIS.indexOf(finalIcon) + 1) % EMOJIS.length];
-          setReels([finalIcon, finalIcon, won ? finalIcon : thirdIcon]);
+      // Where the reels come to rest: three of a kind for a win, a near
+      // miss (two matching, third different) otherwise.
+      const pairId = won ? SLOT_JACKPOT_ID : randomSymbolId();
+      const landing = [pairId, pairId, won ? pairId : randomSymbolId(pairId)];
+
+      // Started here rather than at click time so the reel sound covers
+      // exactly the window the reels are actually turning for.
+      playSlotSpinSound(SPIN_TOTAL_MS);
+      setReelsSpinning([true, true, true]);
+
+      const stopped = [false, false, false];
+      const tumble = setInterval(() => {
+        setReels((prev) => prev.map((id, i) => (stopped[i] ? id : randomSymbolId())));
+      }, 90);
+
+      landing.forEach((id, i) => {
+        setTimeout(() => {
+          stopped[i] = true;
+          setReels((prev) => prev.map((prevId, j) => (j === i ? id : prevId)));
+          setReelsSpinning((prev) => prev.map((was, j) => (j === i ? false : was)));
+          playReelStopSound();
+
+          // The rightmost reel landing is the end of the spin.
+          if (i < landing.length - 1) return;
+          clearInterval(tumble);
           setSpinning(false);
           setResult({ prize: activePrize, alreadySpun: false });
-          playWinSound();
+          // Just behind the last clunk, so the two don't collide.
+          setTimeout(() => (won ? playWinSound() : playNoWinSound()), 200);
           setShowModal(true);
-        }
-      }, 100);
+        }, REEL_SPIN_MS + i * REEL_STOP_STAGGER_MS);
+      });
 
     } catch {
       setSubmitting(false);
@@ -297,12 +346,7 @@ export default function SlotMachine({
         {/* The Reels Panel */}
         <div className="flex gap-3 justify-center rounded-2xl bg-neutral-900 border border-neutral-700 p-4 shadow-inner">
           {reels.map((symbol, idx) => (
-            <div
-              key={idx}
-              className="flex h-20 w-16 items-center justify-center rounded-xl bg-white text-4xl shadow-md border border-neutral-200 overflow-hidden"
-            >
-              <span className={spinning ? "animate-bounce" : ""}>{symbol}</span>
-            </div>
+            <ReelWindow key={idx} symbolId={symbol} spinning={reelsSpinning[idx]} />
           ))}
         </div>
 
@@ -332,39 +376,14 @@ export default function SlotMachine({
       {/* Greeting user */}
       <p className="text-xs text-neutral-400">Playing as: <span className="font-bold text-neutral-200">{sessionName}</span></p>
 
-      {/* Confetti Overlay */}
-      {showModal && result?.prize.isWin && (
-        <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
-          <Lottie
-            src={confettiAnimation}
-            loop={false}
-            autoplay
-            className="w-full h-full"
-            rendererSettings={{ preserveAspectRatio: "xMidYMid slice" }}
-          />
-        </div>
-      )}
-
-      {/* Winning Prize Modal */}
-      {showModal && result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-neutral-900 p-6 text-center shadow-2xl">
-            <h3 className="text-2xl font-black text-amber-400">
-              {result.prize.isWin ? "🎉 CONGRATULATIONS!" : "Better luck next time!"}
-            </h3>
-            <p className="mt-3 text-sm text-neutral-400">
-              {result.prize.isWin
-                ? `You won: ${result.prize.label}`
-                : "Thank you for spinning the reels!"}
-            </p>
-            <button
-              onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-xl bg-neutral-800 hover:bg-neutral-700 py-3 text-sm font-bold text-white border border-neutral-700"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {result && (
+        <PrizeResultModal
+          open={showModal}
+          prize={result.prize}
+          alreadyPlayed={Boolean(result.alreadySpun)}
+          thanksNote="Thank you for spinning the reels!"
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );

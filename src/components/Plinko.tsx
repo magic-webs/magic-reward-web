@@ -2,13 +2,18 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lottie } from "lottie-react";
 import { type WheelFormField, type WheelPrize } from "@/lib/wheel";
 import { firstAnswerProblem } from "@/lib/formFields";
 import PlayerFormFields from "@/components/PlayerFormFields";
-import { playPlinkoDropSound, playPlinkoBounceSound, playWinSound, unlockAudio } from "@/lib/sound";
+import PrizeResultModal from "@/components/PrizeResultModal";
+import {
+  playNoWinSound,
+  playPlinkoBounceSound,
+  playPlinkoDropSound,
+  playWinSound,
+  unlockAudio,
+} from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
-import confettiAnimation from "../../public/lottie-animation/coffeti.json";
 
 type SpinResult = {
   prize: WheelPrize;
@@ -330,7 +335,8 @@ export default function Plinko({
         // Done
         setDropping(false);
         setResult({ prize: activePrize, alreadySpun: false });
-        playWinSound();
+        if (activePrize.isWin) playWinSound();
+        else playNoWinSound();
         setShowModal(true);
         return;
       }
@@ -407,18 +413,27 @@ export default function Plinko({
   const isAlreadySpun = result?.alreadySpun;
 
   return (
-    <div className="relative flex flex-col items-center gap-4">
-      <h2 className="text-lg font-black text-amber-400 tracking-wider uppercase">Plinko Drop</h2>
+    <div className="relative flex w-full max-w-md flex-col items-center gap-5">
+      <div className="text-center">
+        <h2 className="text-lg font-black uppercase tracking-wider text-amber-400">Plinko Drop</h2>
+        <p className="mt-1 text-xs text-neutral-400">
+          {isAlreadySpun
+            ? "You have already dropped your ball."
+            : dropping
+              ? "Watch it fall…"
+              : "Drop the ball and see which slot it settles in."}
+        </p>
+      </div>
 
       {/* Canvas Plinko Board */}
       <canvas
         ref={canvasRef}
         width={BOARD_WIDTH}
         height={BOARD_HEIGHT}
-        className="rounded-3xl border-4 border-neutral-800 shadow-2xl bg-neutral-950"
+        className="max-w-full rounded-3xl border border-neutral-800 bg-neutral-950 shadow-2xl"
       />
 
-      <div className="w-full max-w-xs mt-2">
+      <div className="w-full max-w-xs">
         {isAlreadySpun ? (
           <button
             onClick={() => setShowModal(true)}
@@ -440,39 +455,14 @@ export default function Plinko({
       {error && <p className="text-sm text-red-500 font-bold">{error}</p>}
       <p className="text-xs text-neutral-400">Playing as: <span className="font-bold text-neutral-200">{sessionName}</span></p>
 
-      {/* Confetti Overlay */}
-      {showModal && result?.prize.isWin && (
-        <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
-          <Lottie
-            src={confettiAnimation}
-            loop={false}
-            autoplay
-            className="w-full h-full"
-            rendererSettings={{ preserveAspectRatio: "xMidYMid slice" }}
-          />
-        </div>
-      )}
-
-      {/* Winning Prize Modal */}
-      {showModal && result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-neutral-900 p-6 text-center shadow-2xl">
-            <h3 className="text-2xl font-black text-amber-400">
-              {result.prize.isWin ? "🎉 CONGRATULATIONS!" : "Better luck next time!"}
-            </h3>
-            <p className="mt-3 text-sm text-neutral-400">
-              {result.prize.isWin
-                ? `You won: ${result.prize.label}`
-                : "Thank you for playing Plinko!"}
-            </p>
-            <button
-              onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-xl bg-neutral-800 hover:bg-neutral-700 py-3 text-sm font-bold text-white border border-neutral-700"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {result && (
+        <PrizeResultModal
+          open={showModal}
+          prize={result.prize}
+          alreadyPlayed={Boolean(result.alreadySpun)}
+          thanksNote="Thank you for playing Plinko!"
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );

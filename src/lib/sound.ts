@@ -137,6 +137,63 @@ export function playPlinkoDropSound() {
   });
 }
 
+// A soft knock, as if tapping the lid of the picked box.
+export function playBoxTapSound() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = ctx.currentTime;
+  playTone(ctx, start, 180, { type: "sine", gain: 0.2, attack: 0.004, decay: 0.09 });
+  playTone(ctx, start + 0.01, 90, { type: "triangle", gain: 0.14, attack: 0.004, decay: 0.14 });
+}
+
+// Rising suspense while the lid works itself loose — a stepped sweep up a
+// pentatonic scale that lands right as the box opens, so the wait has a
+// shape instead of the wheel's ratchet clicks that used to play here.
+export function playBoxSuspenseSound(durationMs: number) {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = ctx.currentTime;
+  const duration = durationMs / 1000;
+  const steps = 14;
+  for (let i = 0; i < steps; i++) {
+    // Accelerating: each step lands closer to the last than the one before.
+    const progress = (i / steps) ** 1.6;
+    playTone(ctx, start + duration * progress, 300 * 2 ** (i / 7), {
+      type: "triangle",
+      gain: 0.08,
+      attack: 0.004,
+      decay: 0.06,
+    });
+  }
+}
+
+// The lid coming off: a low pop followed by a shimmer, played on every
+// reveal so a no-win still sounds like something happened.
+export function playBoxOpenSound() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = ctx.currentTime;
+  playTone(ctx, start, 140, { type: "sine", gain: 0.24, attack: 0.003, decay: 0.12 });
+  for (let i = 0; i < 5; i++) {
+    playTone(ctx, start + 0.06 + i * 0.035, 1200 + Math.random() * 900, {
+      type: "sine",
+      gain: 0.06,
+      attack: 0.002,
+      decay: 0.09,
+    });
+  }
+}
+
+// Two gentle descending notes for a reveal that isn't a win — soft enough
+// not to read as an error, since the player did nothing wrong.
+export function playNoWinSound() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = ctx.currentTime;
+  playTone(ctx, start, 392.0, { type: "triangle", gain: 0.14, attack: 0.015, decay: 0.22 }); // G4
+  playTone(ctx, start + 0.16, 311.13, { type: "triangle", gain: 0.13, attack: 0.015, decay: 0.3 }); // Eb4
+}
+
 // A paper-friction like slide sound for flipping cards
 export function playCardFlipSound() {
   const ctx = getAudioContext();
@@ -147,6 +204,25 @@ export function playCardFlipSound() {
     attack: 0.02,
     decay: 0.06,
   });
+}
+
+// A reel clunking into place. Called once per reel as they stop in turn,
+// so a spin ends with three distinct hits instead of silence.
+export function playReelStopSound() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = ctx.currentTime;
+  playTone(ctx, start, 220, { type: "square", gain: 0.1, attack: 0.002, decay: 0.05 });
+  playTone(ctx, start + 0.015, 110, { type: "sine", gain: 0.16, attack: 0.003, decay: 0.1 });
+}
+
+// A flat double-tap when two flipped cards do not match.
+export function playMismatchSound() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = ctx.currentTime;
+  playTone(ctx, start, 233.08, { type: "triangle", gain: 0.12, attack: 0.01, decay: 0.1 }); // Bb3
+  playTone(ctx, start + 0.12, 207.65, { type: "triangle", gain: 0.11, attack: 0.01, decay: 0.14 }); // Ab3
 }
 
 // A positive dual-chime when matching card pairs successfully

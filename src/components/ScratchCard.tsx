@@ -13,7 +13,9 @@ import { Lottie } from "lottie-react";
 import { type WheelFormField, type WheelPrize } from "@/lib/wheel";
 import { firstAnswerProblem } from "@/lib/formFields";
 import PlayerFormFields from "@/components/PlayerFormFields";
-import { playScratchSound, playWinSound, unlockAudio } from "@/lib/sound";
+import { GiftBoxIcon, PrizeBadge } from "@/components/game-icons";
+import { Pointer } from "lucide-react";
+import { playNoWinSound, playScratchSound, playWinSound, unlockAudio } from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
 import confettiAnimation from "../../public/lottie-animation/coffeti.json";
 
@@ -172,7 +174,23 @@ export default function ScratchCard({
     ctx.textBaseline = "middle";
     ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
     ctx.shadowBlur = 5;
-    ctx.fillText("🎁 SCRATCH TO REVEAL 🎁", canvas.width / 2, canvas.height / 2);
+    ctx.fillText("SCRATCH TO REVEAL", canvas.width / 2, canvas.height / 2);
+
+    // Small drawn diamonds either side of the label, in place of the two
+    // gift emoji that used to render differently on every platform.
+    const labelWidth = ctx.measureText("SCRATCH TO REVEAL").width;
+    ctx.fillStyle = "rgba(251, 191, 36, 0.9)"; // amber-400
+    for (const offset of [-labelWidth / 2 - 18, labelWidth / 2 + 18]) {
+      const cx = canvas.width / 2 + offset;
+      const cy = canvas.height / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 6);
+      ctx.lineTo(cx + 5, cy);
+      ctx.lineTo(cx, cy + 6);
+      ctx.lineTo(cx - 5, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
   }, [phase, revealedComplete]);
 
   async function handleRegister(e: FormEvent) {
@@ -265,8 +283,9 @@ export default function ScratchCard({
 
     if (percent > 45 && !revealedComplete) {
       setRevealedComplete(true);
-      if (result && result.prize.isWin && !result.alreadySpun) {
-        playWinSound();
+      if (result && !result.alreadySpun) {
+        if (result.prize.isWin) playWinSound();
+        else playNoWinSound();
       }
       setShowModal(true);
     }
@@ -364,15 +383,12 @@ export default function ScratchCard({
           <div className="absolute inset-0 flex flex-col items-center justify-center border border-amber-400/20 bg-neutral-900 p-4 text-center">
             {result ? (
               <div className="animate-[fade-in-up_0.3s_ease-out] space-y-1">
-                {result.prize.iconUrl ? (
-                  <img
-                    src={result.prize.iconUrl}
-                    alt={result.prize.label}
-                    className="mx-auto h-16 w-16 object-contain"
+                  <PrizeBadge
+                    won={won}
+                    iconUrl={result.prize.iconUrl}
+                    label={result.prize.label}
+                    size="sm"
                   />
-                ) : (
-                  <div className="text-3xl">💫</div>
-                )}
                 <p className="font-bold text-white text-sm">
                   {result.prize.isWin ? `You won: ${result.prize.label}!` : "Better luck next time!"}
                 </p>
@@ -428,23 +444,21 @@ export default function ScratchCard({
         <div className="w-full max-w-sm animate-[fade-in-up_0.4s_ease-out] space-y-3 text-center">
           {sessionName && !revealedComplete && (
             <p className="text-sm font-semibold text-amber-300">
-              Go ahead, {sessionName.split(" ")[0]}! Swipe to scratch the card! 👆
+              <Pointer className="mr-1 inline size-4 align-[-2px]" aria-hidden="true" />
+              Go ahead, {sessionName.split(" ")[0]}! Swipe to scratch the card.
             </p>
           )}
 
           {revealedComplete && result && (
             <div className="animate-[fade-in-up_0.4s_ease-out] rounded-2xl border border-amber-400/20 bg-neutral-900 p-5 text-center shadow-lg">
-              {result.prize.iconUrl ? (
-                <img
-                  src={result.prize.iconUrl}
-                  alt={result.prize.label}
-                  className="mx-auto h-20 w-20 object-contain"
+                <PrizeBadge
+                  won={won}
+                  iconUrl={result.prize.iconUrl}
+                  label={result.prize.label}
+                  size="sm"
                 />
-              ) : (
-                <div className="text-4xl">💫</div>
-              )}
               <p className="mt-2 font-bold text-white">
-                {won ? `You won: ${result.prize.label} 🎁` : "Better luck next time!"}
+                {won ? `You won: ${result.prize.label}` : "Better luck next time!"}
               </p>
               {result.alreadySpun && (
                 <p className="mt-1 text-xs text-gray-500">You've already used your scratch code.</p>
@@ -496,7 +510,9 @@ function RegisterModal({
           onSubmit={onSubmit}
           className="w-full max-w-sm animate-[modal-pop_0.35s_ease-out] space-y-3 rounded-2xl border border-amber-400/20 bg-neutral-900 p-6 shadow-2xl"
         >
-          <h3 className="text-center text-lg font-bold text-white">Enter to Play 🎁</h3>
+          <h3 className="flex items-center justify-center gap-2 text-center text-lg font-bold text-white">
+            <GiftBoxIcon className="size-6" /> Enter to Play
+          </h3>
 
           {settings.askName && (
             <div className="relative">
@@ -583,15 +599,12 @@ function ResultModal({
       <div className="fixed inset-0 z-30 bg-black/70" />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="relative w-full max-w-sm animate-[modal-pop_0.35s_ease-out] rounded-2xl border border-amber-400/20 bg-neutral-900 p-6 text-center shadow-2xl">
-          {result.prize.iconUrl ? (
-            <img
-              src={result.prize.iconUrl}
-              alt={result.prize.label}
-              className="mx-auto h-28 w-28 object-contain drop-shadow-lg"
+            <PrizeBadge
+              won={won}
+              iconUrl={result.prize.iconUrl}
+              label={result.prize.label}
+              size="lg"
             />
-          ) : (
-            <div className="text-5xl">💫</div>
-          )}
           <h3 className="mt-3 text-lg font-bold text-white">
             {result.alreadySpun
               ? "You've already played!"
@@ -603,7 +616,7 @@ function ResultModal({
             {result.alreadySpun
               ? `This link already claimed: ${result.prize.label}.`
               : won
-                ? `You won: ${result.prize.label} 🎁`
+                ? `You won: ${result.prize.label}`
                 : `${result.prize.label} — come back and try again soon!`}
           </p>
           <button

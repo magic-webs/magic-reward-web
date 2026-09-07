@@ -2,13 +2,20 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lottie } from "lottie-react";
 import { type WheelFormField, type WheelPrize } from "@/lib/wheel";
 import { firstAnswerProblem } from "@/lib/formFields";
 import PlayerFormFields from "@/components/PlayerFormFields";
-import { playCardFlipSound, playMatchSuccessSound, playWinSound, unlockAudio } from "@/lib/sound";
+import PrizeResultModal from "@/components/PrizeResultModal";
+import { CardBackIcon, MEMORY_SYMBOLS, memorySymbol } from "@/components/game-icons";
+import {
+  playCardFlipSound,
+  playMatchSuccessSound,
+  playMismatchSound,
+  playNoWinSound,
+  playWinSound,
+  unlockAudio,
+} from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
-import confettiAnimation from "../../public/lottie-animation/coffeti.json";
 
 type SpinResult = {
   prize: WheelPrize;
@@ -32,12 +39,60 @@ export interface MemoryMatchProps {
 
 type CardState = {
   id: number;
-  label: string;
+  // Which of the six shared symbols this card shows. Cards used to be
+  // faced with prize labels padded out with emoji, which meant matching
+  // two lines of truncated 10px text; a memory game wants a picture.
+  symbolId: string;
   isFlipped: boolean;
   isMatched: boolean;
 };
 
-const DEFAULT_EMOJIS = ["🎈", "🎁", "🎉", "👑", "💎", "⭐"];
+const PAIR_COUNT = 6;
+
+// A real two-sided flip: the old card swapped its contents and applied
+// rotate-y-180 to the whole button, which mirrored the face rather than
+// turning the card over.
+function MemoryCard({
+  card,
+  disabled,
+  onFlip,
+}: {
+  card: CardState;
+  disabled: boolean;
+  onFlip: () => void;
+}) {
+  const faceUp = card.isFlipped || card.isMatched;
+  const { Icon, className } = memorySymbol(card.symbolId);
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onFlip}
+      aria-label={faceUp ? `Card showing ${card.symbolId}` : "Flip card"}
+      className="aspect-square w-full perspective-normal"
+    >
+      <span
+        className={`relative block size-full transform-3d transition-transform duration-500 ${
+          faceUp ? "rotate-y-180" : ""
+        }`}
+      >
+        {/* back */}
+        <span className="absolute inset-0 flex items-center justify-center rounded-xl border border-neutral-700 bg-gradient-to-b from-neutral-800 to-neutral-900 backface-hidden transition-colors hover:border-amber-400">
+          <CardBackIcon className="size-5" />
+        </span>
+        {/* face */}
+        <span
+          className={`absolute inset-0 flex rotate-y-180 items-center justify-center rounded-xl border bg-white backface-hidden ${
+            card.isMatched ? "border-emerald-400 ring-2 ring-emerald-400/40" : "border-neutral-200"
+          }`}
+        >
+          <Icon className={`size-7 ${className}`} aria-hidden="true" />
+        </span>
+      </span>
+    </button>
+  );
+}
 
 export default function MemoryMatch({
   companySlug,
@@ -87,17 +142,12 @@ export default function MemoryMatch({
   useEffect(() => {
     if (phase !== "ready") return;
 
-    // Use prize labels or default emojis to fill 6 pairs
-    const pool = prizes.map((p) => p.label).filter(Boolean);
-    while (pool.length < 6) {
-      pool.push(DEFAULT_EMOJIS[pool.length % DEFAULT_EMOJIS.length]);
-    }
-    const selectedLabels = pool.slice(0, 6);
-    const doublePool = [...selectedLabels, ...selectedLabels];
-    
+    const symbolIds = MEMORY_SYMBOLS.slice(0, PAIR_COUNT).map((symbol) => symbol.id);
+    const doublePool = [...symbolIds, ...symbolIds];
+
     // Simple shuffle
     const shuffled = doublePool
-      .map((label, index) => ({ id: index, label, isFlipped: false, isMatched: false }))
+      .map((symbolId, index) => ({ id: index, symbolId, isFlipped: false, isMatched: false }))
       .sort(() => Math.random() - 0.5);
 
     setCards(shuffled);
@@ -195,7 +245,7 @@ export default function MemoryMatch({
 
     if (newIndices.length === 2) {
       const [firstIdx, secondIdx] = newIndices;
-      if (cards[firstIdx].label === cards[secondIdx].label) {
+      if (cards[firstIdx].symbolId === cards[secondIdx].symbolId) {
         // Matched
         playMatchSuccessSound();
         setTimeout(() => {
@@ -216,6 +266,7 @@ export default function MemoryMatch({
         }, 600);
       } else {
         // Discrepancy - flip back
+        playMismatchSound();
         setTimeout(() => {
           setCards((prev) =>
             prev.map((c, i) =>
@@ -247,7 +298,8 @@ export default function MemoryMatch({
 
       const activePrize = resolvePrize(data.prizeId);
       setResult({ prize: activePrize, alreadySpun: false });
-      playWinSound();
+      if (activePrize.isWin) playWinSound();
+      else playNoWinSound();
       setShowModal(true);
     } catch {
       setSubmitting(false);
@@ -319,83 +371,51 @@ export default function MemoryMatch({
 
   const isAlreadySpun = result?.alreadySpun;
 
+  const matchedPairs = cards.filter((c) => c.isMatched).length / 2;
+
   return (
-    <div className="relative flex flex-col items-center gap-4">
-      <h2 className="text-lg font-black text-amber-400 tracking-wider uppercase">Memory Match Pairs</h2>
+    <div className="relative flex w-full max-w-md flex-col items-center gap-5">
+      <div className="text-center">
+        <h2 className="text-lg font-black uppercase tracking-wider text-amber-400">Memory Match Pairs</h2>
+        <p className="mt-1 text-xs text-neutral-400">
+          {isAlreadySpun
+            ? "You have already completed this game."
+            : `Find all ${PAIR_COUNT} pairs — ${matchedPairs} of ${PAIR_COUNT} matched.`}
+        </p>
+      </div>
 
       {isAlreadySpun ? (
-        <div className="flex flex-col items-center">
-          <p className="text-sm text-neutral-400 mb-4">You have already completed this game!</p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="w-full max-w-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-sm font-bold text-white shadow-md active:scale-95"
-          >
-            View Winning Prize
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowModal(true)}
+          className="w-full max-w-xs rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-md hover:bg-emerald-700 active:scale-95"
+        >
+          View Winning Prize
+        </button>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 p-4">
-          {cards.map((card, idx) => {
-            const flipped = card.isFlipped || card.isMatched;
-
-            return (
-              <button
-                key={card.id}
-                disabled={flipped || submitting}
-                onClick={() => handleFlipCard(idx)}
-                className={`flex h-16 w-16 items-center justify-center rounded-xl border text-center text-xs font-bold transition-all duration-300 ${
-                  flipped
-                    ? "bg-white border-neutral-200 text-neutral-900 rotate-y-180"
-                    : "bg-neutral-800 border-neutral-700 hover:border-amber-400 active:scale-95"
-                }`}
-              >
-                {flipped ? (
-                  <span className="line-clamp-2 px-1 text-[10px] leading-tight">{card.label}</span>
-                ) : (
-                  <span className="text-xl text-neutral-500">❓</span>
-                )}
-              </button>
-            );
-          })}
+        <div className="grid w-full grid-cols-4 gap-2.5 rounded-3xl border border-neutral-800 bg-neutral-900/60 p-4 backdrop-blur-sm sm:gap-3">
+          {cards.map((card, idx) => (
+            <MemoryCard
+              key={card.id}
+              card={card}
+              disabled={card.isFlipped || card.isMatched || submitting}
+              onFlip={() => handleFlipCard(idx)}
+            />
+          ))}
         </div>
       )}
 
       {error && <p className="text-sm text-red-500 font-bold">{error}</p>}
       <p className="text-xs text-neutral-400">Playing as: <span className="font-bold text-neutral-200">{sessionName}</span></p>
 
-      {/* Confetti Overlay */}
-      {showModal && result?.prize.isWin && (
-        <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
-          <Lottie
-            src={confettiAnimation}
-            loop={false}
-            autoplay
-            className="w-full h-full"
-            rendererSettings={{ preserveAspectRatio: "xMidYMid slice" }}
-          />
-        </div>
-      )}
-
-      {/* Winning Prize Modal */}
-      {showModal && result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-neutral-900 p-6 text-center shadow-2xl">
-            <h3 className="text-2xl font-black text-amber-400">
-              {result.prize.isWin ? "🎉 CONGRATULATIONS!" : "Better luck next time!"}
-            </h3>
-            <p className="mt-3 text-sm text-neutral-400">
-              {result.prize.isWin
-                ? `You won: ${result.prize.label}`
-                : "Thank you for playing Memory Match!"}
-            </p>
-            <button
-              onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-xl bg-neutral-800 hover:bg-neutral-700 py-3 text-sm font-bold text-white border border-neutral-700"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {result && (
+        <PrizeResultModal
+          open={showModal}
+          prize={result.prize}
+          alreadyPlayed={Boolean(result.alreadySpun)}
+          thanksNote="Thank you for playing Memory Match!"
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );

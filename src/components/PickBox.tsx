@@ -2,13 +2,20 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lottie } from "lottie-react";
 import { type WheelFormField, type WheelPrize } from "@/lib/wheel";
 import { firstAnswerProblem } from "@/lib/formFields";
 import PlayerFormFields from "@/components/PlayerFormFields";
-import { playSpinSound, playWinSound, unlockAudio } from "@/lib/sound";
+import PrizeResultModal from "@/components/PrizeResultModal";
+import { GiftBoxIcon } from "@/components/game-icons";
+import {
+  playBoxOpenSound,
+  playBoxSuspenseSound,
+  playBoxTapSound,
+  playNoWinSound,
+  playWinSound,
+  unlockAudio,
+} from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
-import confettiAnimation from "../../public/lottie-animation/coffeti.json";
 
 type SpinResult = {
   prize: WheelPrize;
@@ -16,6 +23,11 @@ type SpinResult = {
 };
 
 type Phase = "loading" | "register" | "ready";
+
+// How long the box shakes before it gives up its prize.
+const REVEAL_DELAY_MS = 1200;
+
+const BOX_COUNT = 6;
 
 type PopupSettings = {
   askName: boolean;
@@ -158,7 +170,7 @@ export default function PickBox({
     setError(null);
 
     unlockAudio();
-    playSpinSound(1000);
+    playBoxTapSound();
     setOpeningIdx(idx);
     setSubmitting(true);
 
@@ -181,14 +193,18 @@ export default function PickBox({
 
       const activePrize = resolvePrize(data.prizeId);
 
-      // Trigger box open delay animation
+      // The riser is started here rather than at click time so it lands on
+      // the reveal however long the request took.
+      playBoxSuspenseSound(REVEAL_DELAY_MS);
       setTimeout(() => {
         setOpeningIdx(null);
         setOpenedIdx(idx);
         setResult({ prize: activePrize, alreadySpun: false });
-        playWinSound();
+        playBoxOpenSound();
+        // Just behind the lid pop, so the two don't fight each other.
+        setTimeout(() => (activePrize.isWin ? playWinSound() : playNoWinSound()), 180);
         setShowModal(true);
-      }, 1200);
+      }, REVEAL_DELAY_MS);
 
     } catch {
       setSubmitting(false);
@@ -262,44 +278,62 @@ export default function PickBox({
   const isAlreadySpun = result?.alreadySpun;
 
   return (
-    <div className="relative flex flex-col items-center gap-6">
-      <h2 className="text-lg font-black text-amber-400 tracking-wider uppercase">Pick a Box to Win!</h2>
+    <div className="relative flex w-full max-w-md flex-col items-center gap-5">
+      <div className="text-center">
+        <h2 className="text-lg font-black uppercase tracking-wider text-amber-400">Pick a Box to Win!</h2>
+        <p className="mt-1 text-xs text-neutral-400">
+          {isAlreadySpun
+            ? "You have already opened your box."
+            : openedIdx !== null
+              ? "That was your box — here is what was inside."
+              : `One of these ${BOX_COUNT} is holding your prize.`}
+        </p>
+      </div>
 
       {/* Grid of Boxes */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 p-4">
-        {Array.from({ length: 6 }).map((_, idx) => {
+      <div className="grid w-full grid-cols-2 gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/60 p-4 backdrop-blur-sm sm:grid-cols-3 sm:gap-4">
+        {Array.from({ length: BOX_COUNT }).map((_, idx) => {
           const isOpening = openingIdx === idx;
           const isOpened = openedIdx === idx;
+          // Once any box is open the rest are out of play, so they read as
+          // inactive rather than staying invitingly clickable.
+          const isSpent = !isOpened && (openedIdx !== null || isAlreadySpun);
 
           return (
             <button
               key={idx}
-              disabled={isOpened || isAlreadySpun || submitting}
+              type="button"
+              disabled={isOpened || isSpent || submitting}
               onClick={() => handleOpenBox(idx)}
-              className={`group flex flex-col items-center justify-center h-28 w-24 rounded-2xl border-2 transition-transform duration-300 ${
+              aria-label={isOpened ? `Box ${idx + 1}, opened` : `Open box ${idx + 1}`}
+              className={`group relative flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border transition-all duration-300 ${
                 isOpened
-                  ? "bg-neutral-900 border-neutral-700 scale-95"
+                  ? "border-amber-400/70 bg-amber-400/10 shadow-[0_0_30px_-8px_rgba(251,191,36,0.8)]"
                   : isOpening
-                  ? "bg-amber-950/30 border-amber-500 animate-pulse"
-                  : "bg-neutral-800/80 border-neutral-700 hover:border-amber-400 hover:scale-105 active:scale-95"
+                    ? "border-amber-400 bg-amber-400/10"
+                    : isSpent
+                      ? "border-neutral-800 bg-neutral-900/50 opacity-40"
+                      : "border-neutral-700 bg-gradient-to-b from-neutral-800 to-neutral-900/80 hover:-translate-y-1 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-400/10 active:translate-y-0 active:scale-95"
               }`}
             >
-              {isOpened ? (
-                <div className="flex flex-col items-center justify-center">
-                  <span className="text-4xl">🎁</span>
-                  <span className="text-[10px] text-emerald-400 mt-1 font-bold">REVEALED</span>
-                </div>
-              ) : isOpening ? (
-                <div className="flex flex-col items-center justify-center">
-                  <span className="text-4xl animate-bounce">🎁</span>
-                  <span className="text-[10px] text-amber-500 mt-1 font-bold">OPENING...</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center">
-                  <span className="text-4xl group-hover:animate-bounce">🎁</span>
-                  <span className="text-[10px] text-neutral-400 mt-1 font-bold">BOX #{idx + 1}</span>
-                </div>
-              )}
+              <GiftBoxIcon state={isOpened ? "opened" : isOpening ? "opening" : "closed"} />
+              <span
+                className={`line-clamp-2 px-1 text-center text-[10px] font-bold tracking-wide ${
+                  isOpened
+                    ? result?.prize.isWin
+                      ? "text-emerald-400"
+                      : "text-neutral-300"
+                    : isOpening
+                      ? "text-amber-400"
+                      : "text-neutral-400"
+                }`}
+              >
+                {isOpened
+                  ? (result?.prize.label ?? "Revealed")
+                  : isOpening
+                    ? "Opening…"
+                    : `Box #${idx + 1}`}
+              </span>
             </button>
           );
         })}
@@ -317,39 +351,14 @@ export default function PickBox({
       {error && <p className="text-sm text-red-500 font-bold">{error}</p>}
       <p className="text-xs text-neutral-400">Playing as: <span className="font-bold text-neutral-200">{sessionName}</span></p>
 
-      {/* Confetti Overlay */}
-      {showModal && result?.prize.isWin && (
-        <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
-          <Lottie
-            src={confettiAnimation}
-            loop={false}
-            autoplay
-            className="w-full h-full"
-            rendererSettings={{ preserveAspectRatio: "xMidYMid slice" }}
-          />
-        </div>
-      )}
-
-      {/* Winning Prize Modal */}
-      {showModal && result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-neutral-900 p-6 text-center shadow-2xl">
-            <h3 className="text-2xl font-black text-amber-400">
-              {result.prize.isWin ? "🎉 CONGRATULATIONS!" : "Better luck next time!"}
-            </h3>
-            <p className="mt-3 text-sm text-neutral-400">
-              {result.prize.isWin
-                ? `You won: ${result.prize.label}`
-                : "Thank you for picking a box!"}
-            </p>
-            <button
-              onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-xl bg-neutral-800 hover:bg-neutral-700 py-3 text-sm font-bold text-white border border-neutral-700"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {result && (
+        <PrizeResultModal
+          open={showModal}
+          prize={result.prize}
+          alreadyPlayed={Boolean(result.alreadySpun)}
+          thanksNote="Thank you for picking a box!"
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );
