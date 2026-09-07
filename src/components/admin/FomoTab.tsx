@@ -15,6 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import FomoNotifications from "@/components/FomoNotifications";
 import {
   DEFAULT_FOMO_CONFIG,
@@ -455,31 +462,45 @@ export default function FomoTab({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">Screen position</Label>
-                <select
+                <Select
                   value={value.position}
-                  onChange={(e) => patch({ position: e.target.value as FomoPosition })}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  onValueChange={(next) =>
+                    patch({ position: (next ?? value.position) as FomoPosition })
+                  }
                 >
-                  {POSITIONS.map((p) => (
-                    <option key={p.value} value={p.value} className="bg-background text-foreground">
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(v: string) => POSITIONS.find((p) => p.value === v)?.label ?? v}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {POSITIONS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">Colour theme</Label>
-                <select
+                <Select
                   value={value.theme}
-                  onChange={(e) => patch({ theme: e.target.value as FomoTheme })}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  onValueChange={(next) => patch({ theme: (next ?? value.theme) as FomoTheme })}
                 >
-                  {THEMES.map((t) => (
-                    <option key={t.value} value={t.value} className="bg-background text-foreground">
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(v: string) => THEMES.find((t) => t.value === v)?.label ?? v}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {THEMES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

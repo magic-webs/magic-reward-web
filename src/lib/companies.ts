@@ -2,6 +2,11 @@ import { init, id } from "@instantdb/admin";
 import type { NextRequest } from "next/server";
 import schema from "@/instant.schema";
 import type { WheelPrize } from "@/lib/wheel";
+import {
+  normalizeFieldOptions,
+  normalizeFieldType,
+  type FormFieldType,
+} from "@/lib/formFields";
 import { ADMIN_COOKIE_NAME, isValidAdminSessionToken } from "@/lib/adminAuth";
 import { COMPANY_COOKIE_NAME, readCompanySessionToken } from "@/lib/companyAuth";
 import { extractToken } from "@/lib/authToken";
@@ -74,6 +79,8 @@ export interface FormField {
   key: string;
   label: string;
   required: boolean;
+  type: FormFieldType;
+  options: string[];
 }
 
 export interface PublicWheelConfig {
@@ -88,6 +95,26 @@ export interface PublicWheelConfig {
   gameType?: string;
   event?: string;
   offerId?: string;
+}
+
+// Every read of a formFields row goes through this, so a row saved before
+// custom input types existed still hands callers a complete field.
+export function toFormField(row: {
+  id: string;
+  key: string;
+  label: string;
+  required: boolean;
+  type?: string | null;
+  options?: unknown;
+}): FormField {
+  return {
+    id: row.id,
+    key: row.key,
+    label: row.label,
+    required: row.required,
+    type: normalizeFieldType(row.type),
+    options: normalizeFieldOptions(row.options),
+  };
 }
 
 function slugify(name: string) {
@@ -173,7 +200,7 @@ export async function getFormFields(companyId: string): Promise<FormField[]> {
   const { formFields } = await adminDb.query({
     formFields: { $: { where: { companyId }, order: { order: "asc" } } },
   });
-  return formFields.map((f) => ({ id: f.id, key: f.key, label: f.label, required: f.required }));
+  return formFields.map(toFormField);
 }
 
 export async function updateCompany(
@@ -221,12 +248,7 @@ export async function getPublicWheelConfig(companyId: string, offerId?: string):
       color: p.color,
       iconUrl: p.icon?.url,
     })),
-    fields: (offer.formFields ?? []).map((f) => ({
-      id: f.id,
-      key: f.key,
-      label: f.label,
-      required: f.required,
-    })),
+    fields: (offer.formFields ?? []).map(toFormField),
     offerId: offer.id,
   };
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, getOfferWithDetails, resolveCompanyAccess } from "@/lib/companies";
+import { adminDb, getOfferWithDetails, resolveCompanyAccess, toFormField } from "@/lib/companies";
 import { normalizeFomoConfig } from "@/lib/fomo";
 import { normalizeEmbedConfig } from "@/lib/embed";
 
@@ -45,10 +45,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ offe
       .slice()
       .sort((a, b) => a.order - b.order)
       .map((f) => ({
-        id: f.id,
-        key: f.key,
-        label: f.label,
-        required: f.required,
+        ...toFormField(f),
         order: f.order,
       })),
   });

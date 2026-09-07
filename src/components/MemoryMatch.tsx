@@ -4,6 +4,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lottie } from "lottie-react";
 import { type WheelFormField, type WheelPrize } from "@/lib/wheel";
+import { firstAnswerProblem } from "@/lib/formFields";
+import PlayerFormFields from "@/components/PlayerFormFields";
 import { playCardFlipSound, playMatchSuccessSound, playWinSound, unlockAudio } from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
 import confettiAnimation from "../../public/lottie-animation/coffeti.json";
@@ -148,9 +150,9 @@ export default function MemoryMatch({
       setRegisterError("Please enter your phone number.");
       return;
     }
-    const missingField = formFields.find((f) => f.required && !(extraFieldValues[f.key] ?? "").trim());
-    if (missingField) {
-      setRegisterError(`Please enter your ${missingField.label.toLowerCase()}.`);
+    const answerProblem = firstAnswerProblem(formFields, extraFieldValues);
+    if (answerProblem) {
+      setRegisterError(answerProblem);
       return;
     }
 
@@ -292,23 +294,14 @@ export default function MemoryMatch({
               />
             </div>
           )}
-          {formFields.map((field) => (
-            <div key={field.key}>
-              <label className="block text-xs font-semibold text-neutral-400 mb-1">
-                {field.label} {field.required && <span className="text-red-500">*</span>}
-              </label>
-              <input
-                type="text"
-                required={field.required}
-                className="w-full rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
-                placeholder={`Your ${field.label.toLowerCase()}`}
-                value={extraFieldValues[field.key] ?? ""}
-                onChange={(e) =>
-                  setExtraFieldValues((prev) => ({ ...prev, [field.key]: e.target.value }))
-                }
-              />
-            </div>
-          ))}
+          <PlayerFormFields
+            fields={formFields}
+            values={extraFieldValues}
+            onChange={(key, value) =>
+              setExtraFieldValues((prev) => ({ ...prev, [key]: value }))
+            }
+            disabled={registering}
+          />
 
           {registerError && <p className="text-xs text-red-500 font-medium">{registerError}</p>}
 

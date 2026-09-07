@@ -3,6 +3,7 @@ import { id } from "@instantdb/admin";
 import { adminDb } from "@/lib/companies";
 import { buildLoginUrl } from "@/lib/siteUrl";
 import { scheduleWebhookEvent } from "@/lib/webhooks";
+import { validateFieldAnswer, type FormFieldType } from "@/lib/formFields";
 
 const PHONE_RE = /^[0-9+][0-9\s-]{6,14}$/;
 
@@ -17,7 +18,7 @@ export interface RegisterSpinInput {
   token?: string | null;
   extraFields?: Record<string, string>;
   settings: { askName: boolean; askPhone: boolean };
-  fields?: { key: string; label: string; required: boolean }[];
+  fields?: { key: string; label: string; required: boolean; type?: FormFieldType; options?: string[] }[];
 }
 
 export type RegisterSpinResult =
@@ -53,12 +54,17 @@ export async function registerSpin(input: RegisterSpinInput): Promise<RegisterSp
     phone = phone && PHONE_RE.test(phone) ? phone : `anon-${randomBytes(8).toString("hex")}`;
   }
 
-  // Whether an extra field is required is enforced only by the popup form
-  // (see SpinWheel's handleRegister) — the API accepts whatever was sent,
-  // required or not, rather than duplicating that check here.
+  // Answers are checked here as well as in the popup form (see SpinWheel's
+  // handleRegister), because a custom question can now constrain what a
+  // valid answer even is — a dropdown answer has to be one of its choices,
+  // and an embed or a replayed request never went through the popup.
   const extraFields: Record<string, string> = {};
   for (const field of fields) {
-    extraFields[field.key] = (input.extraFields?.[field.key] ?? "").trim();
+    const answer = validateFieldAnswer(field, input.extraFields?.[field.key]);
+    if (!answer.ok) {
+      return { ok: false, status: 400, error: "invalid_input", message: answer.message };
+    }
+    extraFields[field.key] = answer.value;
   }
 
   // A returning magic-link visitor confirming/editing their info — update

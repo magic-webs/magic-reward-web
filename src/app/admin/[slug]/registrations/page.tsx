@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Users, X } from "lucide-react";
 import { SiteHeader } from "@/components/admin/site-header";
+import { DatePickerField } from "@/components/admin/date-picker-field";
 import {
   Card,
   CardContent,
@@ -182,25 +183,23 @@ export default function RegistrationsPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="registrations-from">From</Label>
-                    <Input
+                    <DatePickerField
                       id="registrations-from"
-                      type="date"
                       value={dateFrom}
-                      max={dateTo || undefined}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="w-40"
+                      max={dateTo}
+                      onChange={setDateFrom}
+                      placeholder="Earliest"
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="registrations-to">To</Label>
-                    <Input
+                    <DatePickerField
                       id="registrations-to"
-                      type="date"
                       value={dateTo}
-                      min={dateFrom || undefined}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="w-40"
+                      min={dateFrom}
+                      onChange={setDateTo}
+                      placeholder="Latest"
                     />
                   </div>
 

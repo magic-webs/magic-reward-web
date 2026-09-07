@@ -27,6 +27,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   EMBED_FREQUENCIES,
   buildPlatformSnippets,
   type EmbedConfig,
@@ -43,6 +50,11 @@ const PLATFORMS = [
 ] as const;
 
 type PlatformKey = (typeof PLATFORMS)[number]["key"];
+
+const LAUNCHER_CORNERS: { value: LauncherPosition; label: string }[] = [
+  { value: "bottom-right", label: "Bottom right" },
+  { value: "bottom-left", label: "Bottom left" },
+];
 
 function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -508,25 +520,32 @@ export default function EmbedTab({
                     </div>
                     <div className="space-y-1.5 sm:col-span-3">
                       <Label className="text-xs font-medium text-muted-foreground">Corner</Label>
-                      <select
+                      <Select
                         value={value.launcher.position}
-                        onChange={(e) =>
+                        onValueChange={(next) =>
                           patch({
                             launcher: {
                               ...value.launcher,
-                              position: e.target.value as LauncherPosition,
+                              position: (next ?? value.launcher.position) as LauncherPosition,
                             },
                           })
                         }
-                        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                       >
-                        <option value="bottom-right" className="bg-background text-foreground">
-                          Bottom right
-                        </option>
-                        <option value="bottom-left" className="bg-background text-foreground">
-                          Bottom left
-                        </option>
-                      </select>
+                        <SelectTrigger className="w-full">
+                          <SelectValue>
+                            {(v: string) =>
+                              LAUNCHER_CORNERS.find((c) => c.value === v)?.label ?? v
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LAUNCHER_CORNERS.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 )}

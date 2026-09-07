@@ -11,6 +11,8 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lottie } from "lottie-react";
 import { type WheelFormField, type WheelPrize } from "@/lib/wheel";
+import { firstAnswerProblem } from "@/lib/formFields";
+import PlayerFormFields from "@/components/PlayerFormFields";
 import { playScratchSound, playWinSound, unlockAudio } from "@/lib/sound";
 import { notifyEmbedRegistered } from "@/lib/embedBridge";
 import confettiAnimation from "../../public/lottie-animation/coffeti.json";
@@ -186,9 +188,9 @@ export default function ScratchCard({
       setRegisterError("Please enter your phone number.");
       return;
     }
-    const missingField = formFields.find((f) => f.required && !(extraFieldValues[f.key] ?? "").trim());
-    if (missingField) {
-      setRegisterError(`Please enter your ${missingField.label.toLowerCase()}.`);
+    const answerProblem = firstAnswerProblem(formFields, extraFieldValues);
+    if (answerProblem) {
+      setRegisterError(answerProblem);
       return;
     }
 
@@ -523,18 +525,13 @@ function RegisterModal({
               />
             </div>
           )}
-          {formFields.map((field) => (
-            <div key={field.key}>
-              <input
-                type="text"
-                placeholder={field.required ? `${field.label} *` : field.label}
-                value={extraFieldValues[field.key] ?? ""}
-                onChange={(e) => onExtraFieldChange(field.key, e.target.value)}
-                disabled={registering}
-                className="w-full rounded-2xl border border-emerald-800/60 bg-white/5 px-4 py-3 text-sm text-white shadow-sm outline-none placeholder:text-gray-500 focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20 disabled:opacity-60"
-              />
-            </div>
-          ))}
+          <PlayerFormFields
+            fields={formFields}
+            values={extraFieldValues}
+            onChange={onExtraFieldChange}
+            disabled={registering}
+            variant="amber"
+          />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <button
             type="submit"

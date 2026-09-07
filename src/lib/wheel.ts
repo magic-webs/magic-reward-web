@@ -1,3 +1,5 @@
+import type { FormFieldType } from "@/lib/formFields";
+
 // Generalized, DB-backed version of the arc/draw math that used to live in
 // src/lib/prizes.ts against a hardcoded array. src/lib/prizes.ts itself is
 // left in place — only the migration script still imports it.
@@ -21,6 +23,10 @@ export interface WheelFormField {
   key: string;
   label: string;
   required: boolean;
+  // Which control to render — "text" for questions saved before custom
+  // types existed. Choices are only meaningful for select/radio/checkboxes.
+  type: FormFieldType;
+  options: string[];
 }
 
 // Fixed equal slices (360 / N), in the given order, centered on the

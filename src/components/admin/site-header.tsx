@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -23,11 +23,11 @@ export function SiteHeader({ crumbs, actions }: { crumbs: Crumb[]; actions?: Rea
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-2 h-4" />
+      <Separator orientation="vertical" className="mr-2 data-vertical:h-4" />
       <Breadcrumb>
         <BreadcrumbList>
           {crumbs.map((crumb, i) => (
-            <span key={`${crumb.label}-${i}`} className="flex items-center gap-1.5 sm:gap-2.5">
+            <Fragment key={`${crumb.label}-${i}`}>
               <BreadcrumbItem>
                 {crumb.href ? (
                   <BreadcrumbLink render={<Link href={crumb.href} />}>{crumb.label}</BreadcrumbLink>
@@ -36,7 +36,7 @@ export function SiteHeader({ crumbs, actions }: { crumbs: Crumb[]; actions?: Rea
                 )}
               </BreadcrumbItem>
               {i < crumbs.length - 1 && <BreadcrumbSeparator />}
-            </span>
+            </Fragment>
           ))}
         </BreadcrumbList>
       </Breadcrumb>

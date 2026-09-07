@@ -102,6 +102,15 @@ const _schema = i.schema({
       // already-collected answers keep resolving to the right field.
       key: i.string(),
       required: i.boolean(),
+      // Which input control the question renders as — see the
+      // FormFieldType union in lib/formFields.ts. Optional because rows
+      // created before it existed have none; those read back as "text".
+      type: i.string().optional(),
+      // string[] of choices for the select/radio/checkboxes types, always
+      // read through normalizeFieldOptions(). JSON rather than a linked
+      // entity because it is a short list only ever read and written
+      // together with the field itself.
+      options: i.json().optional(),
       order: i.number().indexed(),
       companyId: i.string().indexed(),
       offerId: i.string().indexed().optional(),
