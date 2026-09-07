@@ -29,6 +29,10 @@ type PopupSettings = {
 
 export interface PlinkoProps {
   companySlug?: string;
+  /** Which offer this page is showing. Without it the server falls
+   *  back to the company's newest active offer, so a registration
+   *  would bind to the wrong offer whenever ?o= names another. */
+  offerId?: string;
   prizes: WheelPrize[];
   bgImageUrl?: string | null;
   initialSettings: PopupSettings;
@@ -42,6 +46,7 @@ const BALL_RADIUS = 7;
 
 export default function Plinko({
   companySlug,
+  offerId,
   prizes,
   bgImageUrl,
   initialSettings,
@@ -220,7 +225,7 @@ export default function Plinko({
       const res = await fetch(registerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, token, extraFields: extraFieldValues }),
+        body: JSON.stringify({ name, phone, token, offerId, extraFields: extraFieldValues }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -248,10 +253,8 @@ export default function Plinko({
     setDropping(true);
     setSubmitting(true);
 
-    const spinUrl = companySlug ? `/api/w/${companySlug}/spin` : "/api/spin";
-
     try {
-      const res = await fetch(spinUrl, {
+      const res = await fetch("/api/spin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),

@@ -36,6 +36,10 @@ type PopupSettings = {
 export interface SpinWheelProps {
   // undefined => the legacy default company, hits the flat /api routes.
   companySlug?: string;
+  /** Which offer this page is showing. Without it the server falls
+   *  back to the company's newest active offer, so a registration
+   *  would bind to the wrong offer whenever ?o= names another. */
+  offerId?: string;
   // Pre-ordered ascending by `order`.
   prizes: WheelPrize[];
   wheelImageUrl: string;
@@ -65,6 +69,7 @@ function computeTargetRotation(currentRotation: number, arcs: ReturnType<typeof 
 
 export default function SpinWheel({
   companySlug,
+  offerId,
   prizes,
   wheelImageUrl,
   pinImageUrl,
@@ -176,7 +181,7 @@ export default function SpinWheel({
       const res = await fetch(registerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, token, extraFields: extraFieldValues }),
+        body: JSON.stringify({ name, phone, token, offerId, extraFields: extraFieldValues }),
       });
       const data = await res.json();
       if (!res.ok) {

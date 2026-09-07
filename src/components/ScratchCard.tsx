@@ -36,6 +36,10 @@ type PopupSettings = {
 
 export interface ScratchCardProps {
   companySlug?: string;
+  /** Which offer this page is showing. Without it the server falls
+   *  back to the company's newest active offer, so a registration
+   *  would bind to the wrong offer whenever ?o= names another. */
+  offerId?: string;
   prizes: WheelPrize[];
   bgImageUrl?: string | null;
   initialSettings: PopupSettings;
@@ -44,6 +48,7 @@ export interface ScratchCardProps {
 
 export default function ScratchCard({
   companySlug,
+  offerId,
   prizes,
   bgImageUrl,
   initialSettings,
@@ -218,7 +223,7 @@ export default function ScratchCard({
       const res = await fetch(registerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, token, extraFields: extraFieldValues }),
+        body: JSON.stringify({ name, phone, token, offerId, extraFields: extraFieldValues }),
       });
       const data = await res.json();
       if (!res.ok) {

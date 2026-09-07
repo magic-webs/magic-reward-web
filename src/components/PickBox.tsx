@@ -36,6 +36,10 @@ type PopupSettings = {
 
 export interface PickBoxProps {
   companySlug?: string;
+  /** Which offer this page is showing. Without it the server falls
+   *  back to the company's newest active offer, so a registration
+   *  would bind to the wrong offer whenever ?o= names another. */
+  offerId?: string;
   prizes: WheelPrize[];
   bgImageUrl?: string | null;
   initialSettings: PopupSettings;
@@ -44,6 +48,7 @@ export interface PickBoxProps {
 
 export default function PickBox({
   companySlug,
+  offerId,
   prizes,
   bgImageUrl,
   initialSettings,
@@ -146,7 +151,7 @@ export default function PickBox({
       const res = await fetch(registerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, token, extraFields: extraFieldValues }),
+        body: JSON.stringify({ name, phone, token, offerId, extraFields: extraFieldValues }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -174,10 +179,8 @@ export default function PickBox({
     setOpeningIdx(idx);
     setSubmitting(true);
 
-    const spinUrl = companySlug ? `/api/w/${companySlug}/spin` : "/api/spin";
-
     try {
-      const res = await fetch(spinUrl, {
+      const res = await fetch("/api/spin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),

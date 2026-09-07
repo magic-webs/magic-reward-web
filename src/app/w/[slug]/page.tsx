@@ -182,6 +182,7 @@ export default async function CustomerLandingPage({
             {config.gameType === "scratch" ? (
               <ScratchCard
                 companySlug={slug}
+                offerId={config.offerId}
                 prizes={config.prizes}
                 bgImageUrl={config.bgImageUrl}
                 initialSettings={{ askName: config.askName, askPhone: config.askPhone }}
@@ -190,6 +191,7 @@ export default async function CustomerLandingPage({
             ) : config.gameType === "slot" ? (
               <SlotMachine
                 companySlug={slug}
+                offerId={config.offerId}
                 prizes={config.prizes}
                 bgImageUrl={config.bgImageUrl}
                 initialSettings={{ askName: config.askName, askPhone: config.askPhone }}
@@ -198,6 +200,7 @@ export default async function CustomerLandingPage({
             ) : config.gameType === "giftbox" ? (
               <PickBox
                 companySlug={slug}
+                offerId={config.offerId}
                 prizes={config.prizes}
                 bgImageUrl={config.bgImageUrl}
                 initialSettings={{ askName: config.askName, askPhone: config.askPhone }}
@@ -206,6 +209,7 @@ export default async function CustomerLandingPage({
             ) : config.gameType === "plinko" ? (
               <Plinko
                 companySlug={slug}
+                offerId={config.offerId}
                 prizes={config.prizes}
                 bgImageUrl={config.bgImageUrl}
                 initialSettings={{ askName: config.askName, askPhone: config.askPhone }}
@@ -214,6 +218,7 @@ export default async function CustomerLandingPage({
             ) : config.gameType === "memory" ? (
               <MemoryMatch
                 companySlug={slug}
+                offerId={config.offerId}
                 prizes={config.prizes}
                 bgImageUrl={config.bgImageUrl}
                 initialSettings={{ askName: config.askName, askPhone: config.askPhone }}
@@ -222,6 +227,7 @@ export default async function CustomerLandingPage({
             ) : (
               <SpinWheel
                 companySlug={slug}
+                offerId={config.offerId}
                 prizes={config.prizes}
                 wheelImageUrl={config.wheelImageUrl ?? ""}
                 pinImageUrl={config.pinImageUrl ?? undefined}
