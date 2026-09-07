@@ -55,19 +55,31 @@ const REEL_SPIN_MS = 1400;
 const REEL_STOP_STAGGER_MS = 320;
 const SPIN_TOTAL_MS = REEL_SPIN_MS + 2 * REEL_STOP_STAGGER_MS;
 
-// One reel window. While the reel is turning the symbol blurs and slides;
-// on landing it snaps still, which reads as the reel locking in.
-function ReelWindow({ symbolId, spinning }: { symbolId: string; spinning: boolean }) {
+// The cabinet artwork already draws the three reel windows, so the symbols
+// are positioned into them rather than being given frames of their own.
+// Percentages measured off public/images/slot-machine.png (1418x1109):
+// windows at x 298-564 / 588-877 / 900-1190, all sharing the band y 220-868.
+// Percentages (not pixels) so the overlay tracks the image at any width.
+const REEL_WINDOWS = [
+  { left: 21.02, width: 18.83 },
+  { left: 41.47, width: 20.45 },
+  { left: 63.47, width: 20.52 },
+];
+const REEL_BAND = { top: 19.84, height: 58.43 };
+
+// While the reel is turning the symbol blurs and slides; on landing it snaps
+// still, which reads as the reel locking in.
+function ReelSymbol({ symbolId, spinning }: { symbolId: string; spinning: boolean }) {
   const { Icon, className } = slotSymbol(symbolId);
   return (
-    <div className="flex h-20 w-16 items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-gradient-to-b from-white to-neutral-200 shadow-inner">
-      <Icon
-        className={`size-9 ${className} ${
-          spinning ? "animate-[reel-spin_0.18s_linear_infinite] blur-[1px]" : ""
-        }`}
-        aria-hidden="true"
-      />
-    </div>
+    <Icon
+      // Sized against the window rather than fixed, so it stays in
+      // proportion as the cabinet scales down on narrow screens.
+      className={`h-auto w-[52%] ${className} drop-shadow-[0_2px_3px_rgba(0,0,0,0.7)] ${
+        spinning ? "animate-[reel-spin_0.18s_linear_infinite] blur-[1px]" : ""
+      }`}
+      aria-hidden="true"
+    />
   );
 }
 
@@ -336,43 +348,50 @@ export default function SlotMachine({
 
   return (
     <div className="relative flex flex-col items-center gap-6">
-      {/* Slot Machine Display */}
-      <div className="w-80 rounded-3xl border-4 border-amber-500 bg-gradient-to-b from-neutral-800 to-neutral-950 p-6 shadow-2xl">
-        {/* Lights / Header */}
-        <div className="flex justify-between mb-4">
-          <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-          <div className="h-3 w-3 rounded-full bg-yellow-500 animate-pulse delay-75" />
-          <span className="text-xs font-black tracking-widest text-amber-400 uppercase">SLOT MACHINE</span>
-          <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse delay-150" />
-          <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse delay-300" />
-        </div>
+      {/* The cabinet artwork carries its own header, lever and lights, so
+          nothing is drawn around it — only the reel symbols sit on top. */}
+      <div className="relative w-full max-w-[22rem]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/slot-machine.png"
+          alt=""
+          draggable={false}
+          className="pointer-events-none w-full select-none"
+        />
+        {reels.map((symbol, idx) => (
+          <div
+            key={idx}
+            className="absolute flex items-center justify-center overflow-hidden"
+            style={{
+              left: `${REEL_WINDOWS[idx].left}%`,
+              width: `${REEL_WINDOWS[idx].width}%`,
+              top: `${REEL_BAND.top}%`,
+              height: `${REEL_BAND.height}%`,
+            }}
+          >
+            <ReelSymbol symbolId={symbol} spinning={reelsSpinning[idx]} />
+          </div>
+        ))}
+      </div>
 
-        {/* The Reels Panel */}
-        <div className="flex gap-3 justify-center rounded-2xl bg-neutral-900 border border-neutral-700 p-4 shadow-inner">
-          {reels.map((symbol, idx) => (
-            <ReelWindow key={idx} symbolId={symbol} spinning={reelsSpinning[idx]} />
-          ))}
-        </div>
-
-        {/* Action Lever / Spin Button */}
-        <div className="mt-6 flex flex-col items-center">
-          {isAlreadySpun ? (
-            <button
-              onClick={() => setShowModal(true)}
-              className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-sm font-bold text-white shadow-md active:scale-95"
-            >
-              View Winning Prize
-            </button>
-          ) : (
-            <button
-              onClick={handlePullLever}
-              disabled={spinning || submitting}
-              className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 py-4 text-base font-black text-neutral-950 shadow-lg border border-amber-400 tracking-wider uppercase active:scale-95 disabled:opacity-50"
-            >
-              {spinning ? "Spinning..." : "Pull Lever!"}
-            </button>
-          )}
-        </div>
+      {/* Action Lever / Spin Button */}
+      <div className="flex w-full max-w-[22rem] flex-col items-center">
+        {isAlreadySpun ? (
+          <button
+            onClick={() => setShowModal(true)}
+            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-sm font-bold text-white shadow-md active:scale-95"
+          >
+            View Winning Prize
+          </button>
+        ) : (
+          <button
+            onClick={handlePullLever}
+            disabled={spinning || submitting}
+            className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 py-4 text-base font-black text-neutral-950 shadow-lg border border-emerald-400 tracking-wider uppercase active:scale-95 disabled:opacity-50"
+          >
+            {spinning ? "Spinning..." : "Pull Lever!"}
+          </button>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-500 font-bold">{error}</p>}

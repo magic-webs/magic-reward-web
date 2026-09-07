@@ -122,15 +122,18 @@ export interface GameSymbol {
 }
 
 // Slot reel faces. `jackpot` is the one all three reels land on for a win.
+// Light steps: these sit in the near-black reel windows of the cabinet
+// artwork (see SlotMachine), so the -500/-600 steps they used to carry —
+// picked for the old white reels — read as almost unlit against it.
 export const SLOT_SYMBOLS: GameSymbol[] = [
-  { id: "cherry", Icon: Cherry, className: "text-rose-500" },
-  { id: "lemon", Icon: Citrus, className: "text-amber-500" },
-  { id: "grape", Icon: Grape, className: "text-violet-500" },
-  { id: "bell", Icon: Bell, className: "text-yellow-500" },
-  { id: "gem", Icon: Gem, className: "text-cyan-500" },
-  { id: "clover", Icon: Clover, className: "text-emerald-500" },
-  { id: "crown", Icon: Crown, className: "text-amber-400" },
-  { id: "coins", Icon: Coins, className: "text-yellow-600" },
+  { id: "cherry", Icon: Cherry, className: "text-rose-400" },
+  { id: "lemon", Icon: Citrus, className: "text-amber-300" },
+  { id: "grape", Icon: Grape, className: "text-violet-400" },
+  { id: "bell", Icon: Bell, className: "text-yellow-300" },
+  { id: "gem", Icon: Gem, className: "text-cyan-300" },
+  { id: "clover", Icon: Clover, className: "text-emerald-400" },
+  { id: "crown", Icon: Crown, className: "text-amber-300" },
+  { id: "coins", Icon: Coins, className: "text-yellow-400" },
 ];
 
 export const SLOT_JACKPOT_ID = "gem";
