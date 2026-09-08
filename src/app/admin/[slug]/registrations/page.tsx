@@ -99,8 +99,13 @@ export default function RegistrationsPage() {
     const link = document.createElement("a");
     link.href = url;
     link.download = registrationsFilename(company.slug);
+    // Firefox only honours a click on an element that is in the document, and
+    // revoking the object URL in the same tick cancels the download that
+    // click just started — so append, click, then revoke on the next tick.
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   const filteredSpins = useMemo(() => {
