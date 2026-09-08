@@ -6,7 +6,7 @@ import Link from "next/link";
 import { 
   ArrowLeft, ArrowUp, ArrowDown, Plus, Trash2, Save, ImagePlus, 
   ExternalLink, Eye, Gamepad2, Calendar, Lock, Globe, FileText, Sparkles,
-  AlertCircle, Settings, BellRing, Trophy, X
+  AlertCircle, Settings, BellRing, Trophy, X, Pencil
 } from "lucide-react";
 import { SiteHeader } from "@/components/admin/site-header";
 import { useCompany, useCompanyCrumbs } from "../../company-context";
@@ -32,6 +32,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   EVENT_THEMES,
   GAME_TYPES,
@@ -117,6 +126,11 @@ export default function OfferDetailPage() {
   const [embedConfig, setEmbedConfig] = useState<EmbedConfig>(DEFAULT_EMBED_CONFIG);
   const [activeTab, setActiveTab] = useState<TabId>("setup");
 
+  // Narrow screens have no room for the inline field editor, so a row
+  // collapses to a summary and opens in a bottom sheet instead.
+  const isMobile = useIsMobile();
+  const [editingField, setEditingField] = useState<{ index: number; isNew: boolean } | null>(null);
+
   // NEXT_PUBLIC_SITE_URL is what production serves the snippet from; the
   // origin fallback keeps the copy-paste code correct in local dev. Resolved
   // after mount so the server and client render the same first pass.
@@ -148,6 +162,14 @@ export default function OfferDetailPage() {
     loadOffer();
   }, [offerId]);
 
+  // Widening past the breakpoint hands editing back to the inline row, so
+  // the sheet should not stay open over it.
+  useEffect(() => {
+    if (!isMobile) setEditingField(null);
+  }, [isMobile]);
+
+  const editingRow = editingField ? fields[editingField.index] ?? null : null;
+
   // Image Upload helpers
   const [uploadingKind, setUploadingKind] = useState<"wheel" | "bg" | "pin" | null>(null);
 
@@ -165,11 +187,12 @@ export default function OfferDetailPage() {
         body: formData,
       });
       if (!res.ok) throw new Error("Failed to upload image.");
-      const data = await res.json();
-      
+      const data = (await res.json()) as { url?: string | null };
+      if (!data.url) throw new Error("Upload succeeded but no image URL came back.");
+
       setOffer((prev) => prev ? {
         ...prev,
-        [`${kind}ImageUrl`]: data.url
+        [`${kind}ImageUrl`]: data.url ?? null,
       } : null);
 
       setSuccess(`Successfully uploaded ${kind} image!`);
@@ -215,7 +238,8 @@ export default function OfferDetailPage() {
         body: formData,
       });
       if (!res.ok) throw new Error("Failed to upload prize icon");
-      const data = await res.json();
+      const data = (await res.json()) as { url?: string | null };
+      if (!data.url) throw new Error("Upload succeeded but no icon URL came back.");
       updatePrize(index, { iconUrl: data.url });
       setSuccess("Uploaded prize icon.");
     } catch {
@@ -272,6 +296,25 @@ export default function OfferDetailPage() {
       ...rows,
       { label: "", required: false, type: DEFAULT_FIELD_TYPE, options: [] },
     ]);
+    if (isMobile) setEditingField({ index: fields.length, isNew: true });
+  }
+
+  function closeFieldSheet() {
+    const current = editingField;
+    setEditingField(null);
+    if (!current?.isNew) return;
+    // Backing out of "Add question" should not leave an untitled row behind,
+    // which saveFields would then refuse.
+    setFields((rows) => {
+      const row = rows[current.index];
+      return row && !row.label.trim() ? rows.filter((_, i) => i !== current.index) : rows;
+    });
+  }
+
+  function deleteEditingField() {
+    if (!editingField) return;
+    removeField(editingField.index);
+    setEditingField(null);
   }
 
   // Switching to a dropdown/radio/checkbox list gives the admin two empty
@@ -821,122 +864,84 @@ export default function OfferDetailPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {fields.map((f, i) => {
-                    const meta = fieldTypeMeta(f.type);
-                    return (
-                      <div key={f.id ?? `new-${i}`} className="space-y-3 rounded-xl border p-4 bg-muted/20">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Input
-                            placeholder="Question Label (e.g. Email Address)"
-                            value={f.label}
-                            onChange={(e) => updateField(i, { label: e.target.value })}
-                            className="min-w-40 flex-1"
-                          />
-                          <Select
-                            value={f.type}
-                            onValueChange={(value) =>
-                              changeFieldType(i, (value ?? f.type) as FormFieldType)
-                            }
+                  {isMobile
+                    ? fields.map((f, i) => (
+                        <FieldSummaryRow
+                          key={f.id ?? `new-${i}`}
+                          field={f}
+                          index={i}
+                          total={fields.length}
+                          onEdit={() => setEditingField({ index: i, isNew: false })}
+                          onMove={(delta) => moveField(i, delta)}
+                        />
+                      ))
+                    : fields.map((f, i) => {
+                        const meta = fieldTypeMeta(f.type);
+                        return (
+                          <div
+                            key={f.id ?? `new-${i}`}
+                            className="space-y-3 rounded-xl border p-4 bg-muted/20"
                           >
-                            <SelectTrigger className="w-52" aria-label="Answer type">
-                              <SelectValue>
-                                {(value: string) => {
-                                  const picked = fieldTypeMeta(value);
-                                  const Icon = picked.icon;
-                                  return (
-                                    <>
-                                      <Icon className="text-muted-foreground" />
-                                      {picked.label}
-                                    </>
-                                  );
-                                }}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {FIELD_TYPES.map((t) => (
-                                <SelectItem key={t.value} value={t.value}>
-                                  <t.icon className="text-muted-foreground" />
-                                  {t.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-muted-foreground">Required:</span>
-                              <Switch
-                                checked={f.required}
-                                onCheckedChange={(checked) => updateField(i, { required: checked })}
+                            <div className="flex flex-wrap items-center gap-3">
+                              <Input
+                                placeholder="Question Label (e.g. Email Address)"
+                                value={f.label}
+                                onChange={(e) => updateField(i, { label: e.target.value })}
+                                className="min-w-40 flex-1"
                               />
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => moveField(i, -1)}
-                                disabled={i === 0}
-                              >
-                                <ArrowUp className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => moveField(i, 1)}
-                                disabled={i === fields.length - 1}
-                              >
-                                <ArrowDown className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeField(i)}
-                                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-muted-foreground">{meta.hint}</p>
-
-                        {meta.hasOptions && (
-                          <div className="space-y-2 rounded-lg border border-dashed p-3">
-                            <p className="text-xs font-medium text-muted-foreground">
-                              Choices {meta.multi ? "(visitors can pick several)" : "(visitors pick one)"}
-                            </p>
-                            {f.options.map((option, j) => (
-                              <div key={j} className="flex items-center gap-2">
-                                <Input
-                                  placeholder={`Choice ${j + 1}`}
-                                  value={option}
-                                  onChange={(e) => updateOption(i, j, e.target.value)}
-                                  className="h-8 flex-1"
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                                  onClick={() => removeOption(i, j)}
-                                  aria-label={`Remove choice ${j + 1}`}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
+                              <FieldTypeSelect
+                                value={f.type}
+                                onChange={(type) => changeFieldType(i, type)}
+                                className="w-52"
+                              />
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-muted-foreground">Required:</span>
+                                  <Switch
+                                    checked={f.required}
+                                    onCheckedChange={(checked) => updateField(i, { required: checked })}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => moveField(i, -1)}
+                                    disabled={i === 0}
+                                  >
+                                    <ArrowUp className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => moveField(i, 1)}
+                                    disabled={i === fields.length - 1}
+                                  >
+                                    <ArrowDown className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => removeField(i)}
+                                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addOption(i)}
-                              disabled={f.options.length >= MAX_FIELD_OPTIONS}
-                            >
-                              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add choice
-                            </Button>
+                            </div>
+
+                            <p className="text-xs text-muted-foreground">{meta.hint}</p>
+
+                            <FieldOptionsEditor
+                              field={f}
+                              onUpdateOption={(j, value) => updateOption(i, j, value)}
+                              onAddOption={() => addOption(i)}
+                              onRemoveOption={(j) => removeOption(i, j)}
+                            />
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
 
                   <Button onClick={addField} variant="outline" className="w-full">
                     <Plus className="mr-2 h-4 w-4" /> Add Signup Question
@@ -948,6 +953,89 @@ export default function OfferDetailPage() {
                   </Button>
                 </CardFooter>
               </Card>
+
+              {editingRow && editingField && (
+                <Sheet
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) closeFieldSheet();
+                  }}
+                >
+                  <SheetContent
+                    side="bottom"
+                    className="max-h-[88dvh] gap-0 rounded-t-2xl p-0"
+                  >
+                    <SheetHeader className="border-b p-4 pr-14">
+                      <SheetTitle>
+                        {editingField.isNew ? "Add signup question" : "Edit signup question"}
+                      </SheetTitle>
+                      <SheetDescription>
+                        {fieldTypeMeta(editingRow.type).hint}
+                      </SheetDescription>
+                    </SheetHeader>
+
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="sheet-field-label">Question label</Label>
+                        <Input
+                          id="sheet-field-label"
+                          placeholder="e.g. Email Address"
+                          value={editingRow.label}
+                          onChange={(e) =>
+                            updateField(editingField.index, { label: e.target.value })
+                          }
+                          autoFocus={editingField.isNew}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="sheet-field-type">Answer type</Label>
+                        <FieldTypeSelect
+                          id="sheet-field-type"
+                          value={editingRow.type}
+                          onChange={(type) => changeFieldType(editingField.index, type)}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="pr-3">
+                          <Label className="text-base">Required</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Visitors cannot play without answering.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={editingRow.required}
+                          onCheckedChange={(checked) =>
+                            updateField(editingField.index, { required: checked })
+                          }
+                        />
+                      </div>
+
+                      <FieldOptionsEditor
+                        field={editingRow}
+                        onUpdateOption={(j, value) =>
+                          updateOption(editingField.index, j, value)
+                        }
+                        onAddOption={() => addOption(editingField.index)}
+                        onRemoveOption={(j) => removeOption(editingField.index, j)}
+                      />
+                    </div>
+
+                    <SheetFooter className="flex-row items-center justify-between gap-2 border-t p-4">
+                      <Button
+                        variant="ghost"
+                        onClick={deleteEditingField}
+                        className="text-red-500 hover:bg-red-500/10 hover:text-red-600"
+                      >
+                        <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                      </Button>
+                      <Button onClick={closeFieldSheet}>Done</Button>
+                    </SheetFooter>
+                  </SheetContent>
+                </Sheet>
+              )}
             </div>
           )}
 
@@ -998,18 +1086,6 @@ export default function OfferDetailPage() {
                       />
                     </div>
 
-                    <div className="rounded-lg border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
-                      Offer type and event theme moved to the{" "}
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("setup")}
-                        className="font-medium text-foreground underline underline-offset-2"
-                      >
-                        Offer Setup
-                      </button>{" "}
-                      tab.
-                    </div>
-
                     <div className="flex items-center justify-between border-t pt-4">
                       <div>
                         <Label className="text-base">Active Status</Label>
@@ -1040,6 +1116,168 @@ export default function OfferDetailPage() {
 }
 
 // Reusable ImageUploadCard component
+// The type picker and the choices editor are identical in the desktop
+// inline row and in the mobile sheet, so they live here rather than being
+// written twice in two layouts.
+function FieldTypeSelect({
+  id,
+  value,
+  onChange,
+  className,
+}: {
+  id?: string;
+  value: FormFieldType;
+  onChange: (type: FormFieldType) => void;
+  className?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(next) => onChange((next ?? value) as FormFieldType)}>
+      <SelectTrigger id={id} className={className} aria-label="Answer type">
+        <SelectValue>
+          {(picked: string) => {
+            const meta = fieldTypeMeta(picked);
+            const Icon = meta.icon;
+            return (
+              <>
+                <Icon className="text-muted-foreground" />
+                {meta.label}
+              </>
+            );
+          }}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {FIELD_TYPES.map((t) => (
+          <SelectItem key={t.value} value={t.value}>
+            <t.icon className="text-muted-foreground" />
+            {t.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function FieldOptionsEditor({
+  field,
+  onUpdateOption,
+  onAddOption,
+  onRemoveOption,
+}: {
+  field: FieldRow;
+  onUpdateOption: (optionIndex: number, value: string) => void;
+  onAddOption: () => void;
+  onRemoveOption: (optionIndex: number) => void;
+}) {
+  const meta = fieldTypeMeta(field.type);
+  if (!meta.hasOptions) return null;
+
+  return (
+    <div className="space-y-2 rounded-lg border border-dashed p-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        Choices {meta.multi ? "(visitors can pick several)" : "(visitors pick one)"}
+      </p>
+      {field.options.map((option, j) => (
+        <div key={j} className="flex items-center gap-2">
+          <Input
+            placeholder={`Choice ${j + 1}`}
+            value={option}
+            onChange={(e) => onUpdateOption(j, e.target.value)}
+            className="h-8 flex-1"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-red-600"
+            onClick={() => onRemoveOption(j)}
+            aria-label={`Remove choice ${j + 1}`}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onAddOption}
+        disabled={field.options.length >= MAX_FIELD_OPTIONS}
+      >
+        <Plus className="mr-1.5 h-3.5 w-3.5" /> Add choice
+      </Button>
+    </div>
+  );
+}
+
+// Mobile stand-in for the inline editor: enough of the question to
+// recognise it, tappable to open the sheet, with reordering kept on the row
+// so resequencing does not mean opening every question in turn.
+function FieldSummaryRow({
+  field,
+  index,
+  total,
+  onEdit,
+  onMove,
+}: {
+  field: FieldRow;
+  index: number;
+  total: number;
+  onEdit: () => void;
+  onMove: (delta: number) => void;
+}) {
+  const meta = fieldTypeMeta(field.type);
+  const Icon = meta.icon;
+  const filledOptions = field.options.filter((o) => o.trim()).length;
+
+  return (
+    <div className="flex items-center gap-1 rounded-xl border bg-muted/20 pr-1">
+      <button
+        type="button"
+        onClick={onEdit}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-l-xl p-3 text-left"
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-background">
+          <Icon className="size-4 text-muted-foreground" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">
+            {field.label.trim() || "Untitled question"}
+          </span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            {meta.label}
+            {meta.hasOptions && <span>· {filledOptions} choices</span>}
+            {field.required && (
+              <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+                Required
+              </Badge>
+            )}
+          </span>
+        </span>
+        <Pencil className="size-4 shrink-0 text-muted-foreground/60" />
+      </button>
+      <div className="flex flex-col">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => onMove(-1)}
+          disabled={index === 0}
+          aria-label="Move question up"
+        >
+          <ArrowUp className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => onMove(1)}
+          disabled={index === total - 1}
+          aria-label="Move question down"
+        >
+          <ArrowDown className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ImageUploadCard({
   title,
   description,
