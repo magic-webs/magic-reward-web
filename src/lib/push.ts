@@ -1,17 +1,10 @@
-import { init, id as generateId } from "@instantdb/admin";
-import schema from "@/instant.schema";
+import { api, asCompanyId, convex } from "@/lib/convex";
 import {
   WEBHOOK_EVENTS,
   isWebhookEventId,
   type WebhookEnvelope,
   type WebhookEventId,
 } from "@/lib/webhookEvents";
-
-const adminDb = init({
-  appId: process.env.NEXT_PUBLIC_INSTANT_APP_ID!,
-  adminToken: process.env.INSTANT_APP_ADMIN_TOKEN!,
-  schema,
-});
 
 // Expo relays to APNs/FCM for us, so the app never handles either
 // directly — it just hands us the ExponentPushToken it was issued.
@@ -52,41 +45,15 @@ export function isExpoPushToken(value: unknown): value is string {
   );
 }
 
-function toRecord(row: {
-  id: string;
-  token: string;
-  role: string;
-  companyId?: string | null;
-  events?: unknown;
-  platform?: string | null;
-  deviceName?: string | null;
-  createdAt: number;
-  lastSeenAt: number;
-}): DeviceRecord {
-  return {
-    id: row.id,
-    token: row.token,
-    role: row.role === "admin" ? "admin" : "company",
-    companyId: row.companyId ?? null,
-    events: toEventIds(row.events),
-    platform: row.platform ?? null,
-    deviceName: row.deviceName ?? null,
-    createdAt: row.createdAt,
-    lastSeenAt: row.lastSeenAt,
-  };
-}
-
 export async function findDevice(token: string): Promise<DeviceRecord | null> {
-  const { deviceTokens } = await adminDb.query({
-    deviceTokens: { $: { where: { token } } },
-  });
-  const row = deviceTokens[0];
-  return row ? toRecord(row) : null;
+  const device = await convex.query(api.devices.getByToken, { token });
+  return device ? { ...device, events: toEventIds(device.events) } : null;
 }
 
 // Upsert: the app re-registers on every launch because Expo can reissue a
 // token at any time, and the same physical device may switch between an
-// admin and a company login.
+// admin and a company login. Omitting `events` leaves whatever the user
+// already chose in Settings alone.
 export async function registerDevice(params: {
   token: string;
   role: DeviceRole;
@@ -94,83 +61,29 @@ export async function registerDevice(params: {
   events?: WebhookEventId[];
   platform?: string | null;
   deviceName?: string | null;
-}): Promise<DeviceRecord> {
-  const now = Date.now();
-  const existing = await findDevice(params.token);
-
-  // Only replace the subscription list when the caller actually sent one —
-  // a plain re-register on launch must not silently undo the user's
-  // choices in Settings.
-  const events = params.events ?? existing?.events ?? DEFAULT_DEVICE_EVENTS;
-
-  const patch = {
+}): Promise<DeviceRecord | null> {
+  const device = await convex.mutation(api.devices.upsert, {
     token: params.token,
     role: params.role,
-    companyId: params.companyId ?? undefined,
-    events,
+    companyId: params.companyId ? asCompanyId(params.companyId) : undefined,
+    events: params.events,
     platform: params.platform ?? undefined,
     deviceName: params.deviceName ?? undefined,
-    lastSeenAt: now,
-  };
-
-  if (existing) {
-    await adminDb.transact(adminDb.tx.deviceTokens[existing.id].update(patch));
-    // `patch` carries `undefined` where a field should be left alone (which
-    // is how InstantDB reads it), so the record handed back is rebuilt from
-    // the merged values rather than spread straight from the patch.
-    return {
-      ...existing,
-      role: params.role,
-      companyId: params.companyId ?? null,
-      events,
-      platform: params.platform ?? existing.platform,
-      deviceName: params.deviceName ?? existing.deviceName,
-      lastSeenAt: now,
-    };
-  }
-
-  const deviceId = generateId();
-  await adminDb.transact(
-    adminDb.tx.deviceTokens[deviceId].update({ ...patch, createdAt: now }),
-  );
-  return {
-    id: deviceId,
-    token: params.token,
-    role: params.role,
-    companyId: params.companyId ?? null,
-    events,
-    platform: params.platform ?? null,
-    deviceName: params.deviceName ?? null,
-    createdAt: now,
-    lastSeenAt: now,
-  };
+    defaultEvents: DEFAULT_DEVICE_EVENTS,
+  });
+  return device ? { ...device, events: toEventIds(device.events) } : null;
 }
 
 export async function updateDeviceEvents(
   token: string,
   events: WebhookEventId[],
 ): Promise<DeviceRecord | null> {
-  const existing = await findDevice(token);
-  if (!existing) return null;
-  await adminDb.transact(
-    adminDb.tx.deviceTokens[existing.id].update({ events, lastSeenAt: Date.now() }),
-  );
-  return { ...existing, events };
+  const device = await convex.mutation(api.devices.updateEvents, { token, events });
+  return device ? { ...device, events: toEventIds(device.events) } : null;
 }
 
 export async function unregisterDevice(token: string): Promise<void> {
-  const existing = await findDevice(token);
-  if (!existing) return;
-  await adminDb.transact(adminDb.tx.deviceTokens[existing.id].delete());
-}
-
-async function deleteTokens(tokens: string[]): Promise<void> {
-  if (tokens.length === 0) return;
-  const { deviceTokens } = await adminDb.query({
-    deviceTokens: { $: { where: { token: { $in: tokens } } } },
-  });
-  if (deviceTokens.length === 0) return;
-  await adminDb.transact(deviceTokens.map((d) => adminDb.tx.deviceTokens[d.id].delete()));
+  await convex.mutation(api.devices.remove, { token });
 }
 
 interface ExpoTicket {
@@ -220,25 +133,23 @@ export async function dispatchPushEvent(
   data: WebhookEnvelope["data"],
 ): Promise<void> {
   try {
-    const [{ companies }, { deviceTokens }] = await Promise.all([
-      adminDb.query({ companies: { $: { where: { id: companyId } } } }),
-      adminDb.query({
-        deviceTokens: { $: { where: { or: [{ companyId }, { role: "admin" }] } } },
+    const [company, targets] = await Promise.all([
+      convex.query(api.companies.getById, { companyId: asCompanyId(companyId) }),
+      convex.query(api.devices.listTargets, {
+        companyId: asCompanyId(companyId),
+        event,
       }),
     ]);
 
-    const company = companies[0];
     if (!company) return;
 
-    const targets = deviceTokens
-      .map(toRecord)
-      .filter((d) => d.events.includes(event) && isExpoPushToken(d.token));
-    if (targets.length === 0) return;
+    const valid = targets.filter((d) => isExpoPushToken(d.token));
+    if (valid.length === 0) return;
 
     const message = buildMessage(event, company.name, data);
     if (!message) return;
 
-    const payload = targets.map((d) => ({
+    const payload = valid.map((d) => ({
       to: d.token,
       title: message.title,
       body: message.body,
@@ -282,7 +193,7 @@ export async function dispatchPushEvent(
 
     // The app was uninstalled or the token was reissued — it will never
     // deliver again, so drop it rather than retrying forever.
-    await deleteTokens(dead);
+    if (dead.length > 0) await convex.mutation(api.devices.removeMany, { tokens: dead });
   } catch {
     // Deliberately silent, as above.
   }

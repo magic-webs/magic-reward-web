@@ -13,6 +13,10 @@ import type { WebhookEnvelope, WebhookEventId } from "@/lib/webhookEvents";
 // where `after` is unavailable.
 export function scheduleEvent(
   companyId: string,
+  // Which offer the event happened on. Webhooks are per-offer now, so an
+  // event with no offer has no endpoint to reach; push is still scoped by
+  // company and admin role, so it goes out either way.
+  offerId: string | null,
   event: WebhookEventId,
   data: WebhookEnvelope["data"],
 ): void {
@@ -20,7 +24,7 @@ export function scheduleEvent(
   // push from going out, or the other way round.
   const run = async () => {
     await Promise.allSettled([
-      dispatchWebhookEvent(companyId, event, data),
+      dispatchWebhookEvent(companyId, offerId, event, data),
       dispatchPushEvent(companyId, event, data),
     ]);
   };

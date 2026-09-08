@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { id as generateId } from "@instantdb/admin";
-import { adminDb, getOfferWithDetails, resolveCompanyAccess, slugifyFieldKey } from "@/lib/companies";
+import { asOfferId, resolveCompanyAccess, slugifyFieldKey } from "@/lib/companies";
+import { api, asFieldId, convex } from "@/lib/convex";
 import { fieldTypeMeta, normalizeFieldOptions, normalizeFieldType } from "@/lib/formFields";
 
 interface FieldInput {
@@ -11,9 +11,13 @@ interface FieldInput {
   options?: unknown;
 }
 
+// Replaces the whole question list. The delete/update/insert and the key
+// deduping all happen inside one Convex mutation, so a half-applied save is
+// no longer possible; validation stays here, where the error copy lives.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
-  const offer = await getOfferWithDetails(offerId);
+
+  const offer = await convex.query(api.offers.getConfigs, { offerId: asOfferId(offerId) });
   if (!offer) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -49,55 +53,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
     );
   }
 
-  const existing = offer.formFields ?? [];
-  const existingById = new Map(existing.map((f) => [f.id, f]));
-  const keptIds = new Set(cleaned.filter((f) => f.id).map((f) => f.id!));
-  const toDelete = existing.filter((f) => !keptIds.has(f.id)).map((f) => f.id);
+  await convex.mutation(api.formFields.replaceForOffer, {
+    offerId: asOfferId(offerId),
+    companyId: offer.companyId,
+    fields: cleaned.map((f) => ({
+      id: f.id ? asFieldId(f.id) : undefined,
+      label: f.label,
+      required: f.required,
+      type: f.type,
+      options: f.options,
+      keyBase: slugifyFieldKey(f.label),
+    })),
+  });
 
-  const usedKeys = new Set(existing.filter((f) => keptIds.has(f.id)).map((f) => f.key));
-
-  const txs = [
-    ...toDelete.map((existingId) => adminDb.tx.formFields[existingId].delete()),
-    ...cleaned.map((f, order) => {
-      const prior = f.id ? existingById.get(f.id) : undefined;
-      if (prior) {
-        return adminDb.tx.formFields[prior.id].update({
-          label: f.label,
-          required: f.required,
-          type: f.type,
-          options: f.options,
-          order,
-          key: prior.key,
-        });
-      }
-
-      const base = slugifyFieldKey(f.label);
-      let key = base;
-      let suffix = 2;
-      while (usedKeys.has(key)) {
-        key = `${base}-${suffix}`;
-        suffix += 1;
-      }
-      usedKeys.add(key);
-
-      const fieldId = generateId();
-      return adminDb.tx.formFields[fieldId]
-        .update({
-          label: f.label,
-          required: f.required,
-          type: f.type,
-          options: f.options,
-          order,
-          key,
-          companyId: offer.companyId,
-          offerId,
-          createdAt: Date.now()
-        })
-        .link({ offer: offerId })
-        .link({ company: offer.companyId });
-    }),
-  ];
-
-  await adminDb.transact(txs);
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { id as generateId } from "@instantdb/admin";
-import { adminDb, getCompanyWithDetails, resolveCompanyAccess } from "@/lib/companies";
+import { asCompanyId, resolveCompanyAccess } from "@/lib/companies";
+import { api, asPrizeId, convex } from "@/lib/convex";
 
 interface PrizeInput {
   id?: string;
@@ -10,10 +10,10 @@ interface PrizeInput {
   color?: string | null;
 }
 
-// Saves the whole prize list for a company atomically: existing rows
-// (matched by id) are updated, new rows (no id) are created, and any
-// existing row not present in the submitted array is deleted. `order` is
-// assigned from array position.
+// The pre-offer company-level wheel. Saves the whole list in one Convex
+// mutation: rows matched by id are updated, rows without one are created,
+// and anything missing from the submitted array is deleted. `order` comes
+// from array position.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: companyId } = await params;
   if (!(await resolveCompanyAccess(req, companyId))) {
@@ -40,32 +40,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     );
   }
 
-  const company = await getCompanyWithDetails(companyId);
-  if (!company) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
+  await convex.mutation(api.prizes.replaceForCompany, {
+    companyId: asCompanyId(companyId),
+    prizes: cleaned.map((p) => ({ ...p, id: p.id ? asPrizeId(p.id) : undefined })),
+  });
 
-  const existingIds = new Set((company.prizes ?? []).map((p) => p.id));
-  const keptIds = new Set(cleaned.filter((p) => p.id).map((p) => p.id!));
-  const toDelete = [...existingIds].filter((existingId) => !keptIds.has(existingId));
-
-  const txs = [
-    ...toDelete.map((existingId) => adminDb.tx.prizes[existingId].delete()),
-    ...cleaned.map((p, order) => {
-      const prizeId = p.id ?? generateId();
-      const update = adminDb.tx.prizes[prizeId].update({
-        label: p.label,
-        weight: p.weight,
-        isWin: p.isWin,
-        color: p.color,
-        order,
-        companyId,
-        ...(p.id ? {} : { createdAt: Date.now() }),
-      });
-      return p.id ? update : update.link({ company: companyId });
-    }),
-  ];
-
-  await adminDb.transact(txs);
   return NextResponse.json({ ok: true });
 }

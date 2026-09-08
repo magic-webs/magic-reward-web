@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, resolveCompanyAccess } from "@/lib/companies";
+import { asOfferId, resolveCompanyAccess } from "@/lib/companies";
+import { api, convex } from "@/lib/convex";
+import { uploadToStorage } from "@/lib/uploadImage";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
-  
-  const { offers } = await adminDb.query({ offers: { $: { where: { id: offerId } } } });
-  const offer = offers[0];
+
+  const offer = await convex.query(api.offers.getConfigs, { offerId: asOfferId(offerId) });
   if (!offer) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -28,14 +29,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ off
     return NextResponse.json({ error: "invalid_input", message: "No file provided." }, { status: 400 });
   }
 
-  const linkField = kind === "wheel" ? "wheelImage" : kind === "bg" ? "bgImage" : "pinImage";
-  const buffer = Buffer.from(await file.arrayBuffer());
-  
-  const { data } = await adminDb.storage.uploadFile(`offers/${offerId}/${kind}-image`, buffer, {
-    contentType: file.type || "image/png",
-  });
-
-  await adminDb.transact(adminDb.tx.offers[offerId].link({ [linkField]: data.id }));
+  const storageId = await uploadToStorage(file);
+  await convex.mutation(api.offers.setImage, { offerId: asOfferId(offerId), kind, storageId });
 
   return NextResponse.json({ ok: true });
 }

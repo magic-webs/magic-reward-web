@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "crypto";
-import { adminDb } from "@/lib/companies";
+import { api, asCompanyId, asOfferId, asWebhookId, convex } from "@/lib/convex";
 import {
   buildSamplePayload,
   isWebhookEventId,
@@ -12,6 +12,8 @@ export * from "@/lib/webhookEvents";
 
 export interface WebhookRecord {
   id: string;
+  companyId: string;
+  offerId: string;
   url: string;
   secret: string;
   events: WebhookEventId[];
@@ -156,41 +158,84 @@ function toEventIds(value: unknown): WebhookEventId[] {
   return Array.isArray(value) ? value.filter(isWebhookEventId) : [];
 }
 
-export async function listWebhooks(companyId: string): Promise<WebhookRecord[]> {
-  const { webhooks } = await adminDb.query({
-    webhooks: { $: { where: { companyId }, order: { createdAt: "asc" } } },
-  });
-  return webhooks.map((w) => ({
-    id: w.id,
-    url: w.url,
-    secret: w.secret,
-    events: toEventIds(w.events),
-    isActive: w.isActive,
-    createdAt: w.createdAt,
-    lastStatus: w.lastStatus ?? null,
-    lastError: w.lastError ?? null,
-    lastAttemptAt: w.lastAttemptAt ?? null,
-  }));
+function toRecord(row: {
+  id: string;
+  companyId: string;
+  offerId: string;
+  url: string;
+  secret: string;
+  events: string[];
+  isActive: boolean;
+  createdAt: number;
+  lastStatus: number | null;
+  lastError: string | null;
+  lastAttemptAt: number | null;
+}): WebhookRecord {
+  return { ...row, events: toEventIds(row.events) };
 }
 
-// Sends `event` to every active endpoint of `companyId` subscribed to it,
-// then records each outcome. Deliberately swallows everything: a customer
-// spinning the wheel must never see an error because someone's CRM is
-// down.
+// The list the dashboard edits: endpoints belong to one offer.
+export async function listOfferWebhooks(offerId: string): Promise<WebhookRecord[]> {
+  const rows = await convex.query(api.webhooks.listByOffer, { offerId: asOfferId(offerId) });
+  return rows.map(toRecord);
+}
+
+// Every endpoint a company owns, across all of its offers.
+export async function listWebhooks(companyId: string): Promise<WebhookRecord[]> {
+  const rows = await convex.query(api.webhooks.listByCompany, {
+    companyId: asCompanyId(companyId),
+  });
+  return rows.map(toRecord);
+}
+
+export async function replaceOfferWebhooks(
+  offerId: string,
+  companyId: string,
+  webhooks: Array<{
+    id?: string;
+    url: string;
+    events: WebhookEventId[];
+    isActive: boolean;
+    secret?: string;
+  }>,
+): Promise<WebhookRecord[]> {
+  const rows = await convex.mutation(api.webhooks.replaceForOffer, {
+    offerId: asOfferId(offerId),
+    companyId: asCompanyId(companyId),
+    webhooks: webhooks.map((w) => ({
+      id: w.id ? asWebhookId(w.id) : undefined,
+      url: w.url,
+      events: w.events,
+      isActive: w.isActive,
+      secret: w.secret,
+    })),
+  });
+  return rows.map(toRecord);
+}
+
+// Sends `event` to every active endpoint of the offer it happened on, then
+// records each outcome. Deliberately swallows everything: a customer
+// playing a game must never see an error because someone's CRM is down.
 export async function dispatchWebhookEvent(
   companyId: string,
+  offerId: string | null,
   event: WebhookEventId,
   data: WebhookEnvelope["data"],
 ): Promise<void> {
   try {
-    const { companies } = await adminDb.query({ companies: { $: { where: { id: companyId } } } });
-    const company = companies[0];
-    if (!company) return;
+    // Endpoints hang off an offer, so an event with no offer (a pre-offer
+    // registration) has nowhere to go.
+    if (!offerId) return;
 
-    const subscribed = (await listWebhooks(companyId)).filter(
-      (w) => w.isActive && w.events.includes(event),
-    );
-    if (subscribed.length === 0) return;
+    const [company, subscribed] = await Promise.all([
+      convex.query(api.companies.getById, { companyId: asCompanyId(companyId) }),
+      convex.query(api.webhooks.subscribersForOffer, {
+        offerId: asOfferId(offerId),
+        event,
+      }),
+    ]);
+
+    if (!company || subscribed.length === 0) return;
 
     const envelope = buildEnvelope(
       event,
@@ -205,12 +250,16 @@ export async function dispatchWebhookEvent(
       })),
     );
 
-    await adminDb.transact(
+    // One mutation per endpoint: Convex has no multi-document transact API
+    // the way Instant did, and these are independent status writes.
+    const attemptedAt = Date.now();
+    await Promise.all(
       results.map(({ id, result }) =>
-        adminDb.tx.webhooks[id].update({
+        convex.mutation(api.webhooks.recordDelivery, {
+          webhookId: asWebhookId(id),
           lastStatus: result.status ?? 0,
           lastError: result.error ?? "",
-          lastAttemptAt: Date.now(),
+          lastAttemptAt: attemptedAt,
         }),
       ),
     );

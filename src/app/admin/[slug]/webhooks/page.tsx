@@ -88,10 +88,44 @@ export default function WebhooksPage() {
   const [results, setResults] = useState<Record<number, TestResult>>({});
   const [previewEvent, setPreviewEvent] = useState<WebhookEventId>("registration.created");
 
+  // Endpoints belong to an offer now, so the page loads the company's
+  // offers first and edits one offer's list at a time. Defaults to the
+  // newest, matching the order the offers list shows.
+  const [offers, setOffers] = useState<Array<{ id: string; title: string; type: string }>>([]);
+  const [offerId, setOfferId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/companies/${company.id}/offers`, {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const list = (data.offers ?? []) as Array<{ id: string; title: string; type: string }>;
+        if (cancelled) return;
+        setOffers(list);
+        setOfferId((current) => current ?? list[0]?.id ?? null);
+      } catch {
+        // The offer picker just stays empty; the error surface below is
+        // driven by the endpoint load.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [company.id]);
+
   const load = useCallback(async () => {
+    if (!offerId) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/companies/${company.id}/webhooks`, { cache: "no-store" });
+      const res = await fetch(`/api/admin/offers/${offerId}/webhooks`, { cache: "no-store" });
       if (!res.ok) {
         setError("Couldn't load webhooks.");
         return;
@@ -103,7 +137,7 @@ export default function WebhooksPage() {
     } finally {
       setLoading(false);
     }
-  }, [company.id]);
+  }, [offerId]);
 
   useEffect(() => {
     load();
@@ -137,7 +171,7 @@ export default function WebhooksPage() {
     }
     setSaving(true);
     try {
-      const res = await fetch(`/api/admin/companies/${company.id}/webhooks`, {
+      const res = await fetch(`/api/admin/offers/${offerId}/webhooks`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ webhooks: rows }),
@@ -166,7 +200,7 @@ export default function WebhooksPage() {
       return next;
     });
     try {
-      const res = await fetch(`/api/admin/companies/${company.id}/webhooks/test`, {
+      const res = await fetch(`/api/admin/offers/${offerId}/webhooks/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: row.url.trim(), event, webhookId: row.id ?? null }),
@@ -205,14 +239,40 @@ export default function WebhooksPage() {
     <>
       <SiteHeader crumbs={crumbs} />
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+        {/* Endpoints belong to one offer, so which offer is being edited
+            has to be explicit before anything below makes sense. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Offer</CardTitle>
+            <CardDescription>
+              {offers.length === 0
+                ? "Endpoints belong to an offer — create one first."
+                : "Each offer has its own endpoints and its own signing secrets."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {offers.map((o) => (
+              <Button
+                key={o.id}
+                type="button"
+                size="sm"
+                variant={offerId === o.id ? "default" : "outline"}
+                onClick={() => setOfferId(o.id)}
+              >
+                {o.title}
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Webhook className="size-4" /> Endpoints
             </CardTitle>
             <CardDescription>
-              POST every registration and spin result to your own systems as it happens. Each
-              delivery is signed so you can verify it really came from us.
+              POST this offer's registrations and spin results to your own systems as they
+              happen. Each delivery is signed so you can verify it really came from us.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

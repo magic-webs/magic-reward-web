@@ -20,31 +20,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     askPhone: company.askPhone,
     hasPassword: Boolean(company.passwordHash),
     gameType: company.gameType ?? "wheel",
-    wheelImageUrl: company.wheelImage?.url ?? null,
-    bgImageUrl: company.bgImage?.url ?? null,
-    pinImageUrl: company.pinImage?.url ?? null,
-    prizes: (company.prizes ?? [])
-      .slice()
-      .sort((a, b) => a.order - b.order)
-      .map((p) => ({
-        id: p.id,
-        label: p.label,
-        weight: p.weight,
-        color: p.color ?? null,
-        order: p.order,
-        isWin: p.isWin,
-        iconUrl: p.icon?.url ?? null,
-      })),
-    fields: (company.formFields ?? [])
-      .slice()
-      .sort((a, b) => a.order - b.order)
-      .map((f) => ({
-        id: f.id,
-        key: f.key,
-        label: f.label,
-        required: f.required,
-        order: f.order,
-      })),
+    // Image URLs are resolved from storage ids by the query, and both
+    // lists come back already in display order.
+    wheelImageUrl: company.wheelImageUrl,
+    bgImageUrl: company.bgImageUrl,
+    pinImageUrl: company.pinImageUrl,
+    prizes: company.prizes.map((p) => ({
+      id: p.id,
+      label: p.label,
+      weight: p.weight,
+      color: p.color ?? null,
+      order: p.order,
+      isWin: p.isWin,
+      iconUrl: p.iconUrl,
+    })),
+    fields: company.formFields.map((f) => ({
+      id: f.id,
+      key: f.key,
+      label: f.label,
+      required: f.required,
+      order: f.order,
+    })),
   });
 }
 

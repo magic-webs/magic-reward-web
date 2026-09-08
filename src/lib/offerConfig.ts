@@ -1,8 +1,8 @@
-import { adminDb } from "@/lib/companies";
+import { api, convex, asOfferId } from "@/lib/convex";
 
 // Small focused read of just the two JSON config blobs on an offer, so the
 // FOMO and embed endpoints do not have to pull prizes, form fields and
-// three image links they never look at.
+// three image URLs they never look at.
 export async function getOfferConfigs(offerId: string): Promise<{
   fomo: unknown;
   embed: unknown;
@@ -10,16 +10,15 @@ export async function getOfferConfigs(offerId: string): Promise<{
   companyId: string | null;
   isActive: boolean;
 }> {
-  const { offers } = await adminDb.query({ offers: { $: { where: { id: offerId } } } });
-  const offer = offers[0];
+  const offer = await convex.query(api.offers.getConfigs, { offerId: asOfferId(offerId) });
   if (!offer) {
     return { fomo: null, embed: null, title: null, companyId: null, isActive: false };
   }
   return {
-    fomo: offer.fomoConfig ?? null,
-    embed: offer.embedConfig ?? null,
+    fomo: offer.fomo,
+    embed: offer.embed,
     title: offer.title,
-    companyId: offer.companyId ?? null,
+    companyId: offer.companyId,
     isActive: offer.isActive,
   };
 }

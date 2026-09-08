@@ -65,6 +65,13 @@ export async function POST(req: NextRequest) {
     deviceName: typeof body?.deviceName === "string" ? body.deviceName : null,
   });
 
+  if (!device) {
+    return NextResponse.json(
+      { error: "server_error", message: "Couldn't register this device." },
+      { status: 500 },
+    );
+  }
+
   return NextResponse.json({
     device: { token: device.token, events: device.events, role: device.role },
   });

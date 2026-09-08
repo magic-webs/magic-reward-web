@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, resolveCompanyAccess } from "@/lib/companies";
+import { asCompanyId, resolveCompanyAccess } from "@/lib/companies";
+import { api, convex } from "@/lib/convex";
+import { uploadToStorage } from "@/lib/uploadImage";
 
-// Fixed path per company so re-uploading overwrites the previous image in
-// place instead of accumulating orphaned $files rows.
+// Re-uploading replaces the previous image: companies.setImage deletes the
+// blob it swaps out, so nothing is orphaned in storage.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: companyId } = await params;
   if (!(await resolveCompanyAccess(req, companyId))) {
@@ -15,11 +17,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "invalid_input", message: "No file provided." }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { data } = await adminDb.storage.uploadFile(`companies/${companyId}/pin-image`, buffer, {
-    contentType: file.type || "image/png",
+  const storageId = await uploadToStorage(file);
+  await convex.mutation(api.companies.setImage, {
+    companyId: asCompanyId(companyId),
+    kind: "pin",
+    storageId,
   });
-  await adminDb.transact(adminDb.tx.companies[companyId].link({ pinImage: data.id }));
 
   return NextResponse.json({ ok: true });
 }

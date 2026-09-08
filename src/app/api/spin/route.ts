@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, getDefaultCompany } from "@/lib/companies";
-import { drawWeightedPrize, type WheelPrize } from "@/lib/wheel";
+import { api, convex } from "@/lib/convex";
 import { scheduleEvent } from "@/lib/notify";
 
 // The spin itself is identified purely by the token from /api/register —
@@ -18,84 +17,51 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { spins } = await adminDb.query({ spins: { $: { where: { token } } } });
-  const record = spins[0];
-  if (!record) {
+  // Reading the prizes and writing the result now happen in one Convex
+  // mutation, so two simultaneous requests on the same token can no longer
+  // both draw. The old self-healing companyId fallback is gone with it:
+  // companyId is required on every row.
+  const result = await convex.mutation(api.spins.recordSpin, { token });
+
+  if (result.status === "not_found") {
     return NextResponse.json(
       { error: "not_found", message: "Your link has expired. Please register again." },
       { status: 404 },
     );
   }
 
-  if (record.prizeId) {
-    return NextResponse.json({
-      alreadySpun: true,
-      prizeId: record.prizeId,
-      prizeLabel: record.prizeLabel,
-    });
-  }
-
-  // Self-healing fallback: a row created in the gap between the migration
-  // running and this route's deploy might not have companyId set yet.
-  const companyId = record.companyId ?? (await getDefaultCompany())?.id;
-  if (!companyId) {
-    return NextResponse.json(
-      { error: "server_error", message: "Something went wrong. Please try again." },
-      { status: 500 },
-    );
-  }
-
-  // Query prizes by offerId if present, otherwise fall back to companyId
-  const offerId = record.offerId;
-  const { prizes } = await adminDb.query({
-    prizes: {
-      $: {
-        where: offerId ? { offerId } : { companyId },
-        order: { order: "asc" },
-      },
-    },
-  });
-
-  if (prizes.length === 0) {
+  if (result.status === "no_prizes") {
     return NextResponse.json(
       { error: "server_error", message: "This game isn't set up yet." },
       { status: 500 },
     );
   }
-  const prize = drawWeightedPrize(prizes as WheelPrize[]);
 
-  try {
-    await adminDb.transact(
-      adminDb.tx.spins[record.id].update({
-        prizeId: prize.id,
-        prizeLabel: prize.label,
-      }),
-    );
-  } catch {
-    return NextResponse.json(
-      { error: "server_error", message: "Something went wrong. Please try again." },
-      { status: 500 },
-    );
+  if (result.status === "already") {
+    return NextResponse.json({
+      alreadySpun: true,
+      prizeId: result.prizeId,
+      prizeLabel: result.prizeLabel,
+    });
   }
 
-  // Fires only on this path, never on the `alreadySpun` early return
-  // above, so re-opening a magic link doesn't re-report the same result.
+  // Fires only on this path, never on the `already` return above, so
+  // re-opening a magic link doesn't re-report the same result.
   const eventData = {
-    registration: {
-      id: record.id,
-      name: record.name,
-      phone: record.phone,
-      extraFields: (record.extraFields ?? {}) as Record<string, string>,
-      createdAt: record.createdAt,
-    },
-    prize: { id: prize.id, label: prize.label, isWin: prize.isWin },
+    registration: result.registration,
+    prize: { id: result.prizeId, label: result.prizeLabel, isWin: result.isWin },
   };
-  scheduleEvent(companyId, "spin.completed", eventData);
-  scheduleEvent(companyId, prize.isWin ? "prize.won" : "prize.lost", eventData);
+  scheduleEvent(result.companyId, result.offerId, "spin.completed", eventData);
+  scheduleEvent(
+    result.companyId,
+    result.offerId,
+    result.isWin ? "prize.won" : "prize.lost",
+    eventData,
+  );
 
   return NextResponse.json({
     alreadySpun: false,
-    prizeId: prize.id,
-    prizeLabel: prize.label,
+    prizeId: result.prizeId,
+    prizeLabel: result.prizeLabel,
   });
 }

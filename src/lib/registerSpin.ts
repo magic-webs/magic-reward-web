@@ -1,6 +1,5 @@
 import { randomBytes } from "crypto";
-import { id } from "@instantdb/admin";
-import { adminDb } from "@/lib/companies";
+import { api, asCompanyId, asOfferId, convex } from "@/lib/convex";
 import { buildLoginUrl } from "@/lib/siteUrl";
 import { scheduleEvent } from "@/lib/notify";
 import { validateFieldAnswer, type FormFieldType } from "@/lib/formFields";
@@ -67,75 +66,44 @@ export async function registerSpin(input: RegisterSpinInput): Promise<RegisterSp
     extraFields[field.key] = answer.value;
   }
 
-  // A returning magic-link visitor confirming/editing their info — update
-  // their existing row directly by id, no phone-uniqueness lookup needed
-  // since it's their own already-issued link.
-  if (input.token) {
-    const { spins } = await adminDb.query({
-      spins: { $: { where: { token: input.token, companyId } } },
-    });
-    const existing = spins[0];
-    if (existing?.token) {
-      await adminDb.transact(adminDb.tx.spins[existing.id].update({ name, phone, extraFields }));
-      return { ok: true, token: existing.token, loginUrl: buildLoginUrl(existing.token, companySlug, offerId) };
-    }
-    // Stale/invalid token — fall through to the normal lookup-or-create flow.
-  }
-
-  const existing = await adminDb.query({
-    spins: {
-      $: {
-        where: offerId
-          ? { phone, companyId, offerId }
-          : { phone, companyId },
-      },
-    },
+  // Resolution order (a valid magic-link token, then an existing phone for
+  // this company, then a new row) lives in the Convex mutation so all three
+  // branches share one transaction. That also removes the old
+  // race-on-phone recovery path: two simultaneous requests for the same
+  // number can no longer both insert.
+  const result = await convex.mutation(api.spins.register, {
+    companyId: asCompanyId(companyId),
+    offerId: offerId ? asOfferId(offerId) : undefined,
+    name,
+    phone,
+    extraFields,
+    freshToken: generateToken(),
+    existingToken: input.token ?? undefined,
   });
-  if (existing.spins.length > 0) {
-    const prev = existing.spins[0];
-    if (prev.token) {
-      return { ok: true, token: prev.token, loginUrl: buildLoginUrl(prev.token, companySlug, offerId) };
-    }
-    const token = generateToken();
-    await adminDb.transact(adminDb.tx.spins[prev.id].update({ token }));
-    return { ok: true, token, loginUrl: buildLoginUrl(token, companySlug, offerId) };
-  }
 
-  const token = generateToken();
-  const spinId = id();
-  const createdAt = Date.now();
-  try {
-    await adminDb.transact(
-      adminDb.tx.spins[spinId]
-        .update({ name, phone, token, companyId, offerId: offerId ?? undefined, extraFields, createdAt })
-        .link({ company: companyId })
-        .link(offerId ? { offer: offerId } : {}),
-    );
-  } catch {
-    // Race on phone+companyId — someone else's request for the same
-    // number landed first. Fetch their token instead of erroring.
-    const afterRace = await adminDb.query({
-      spins: {
-        $: {
-          where: offerId
-            ? { phone, companyId, offerId }
-            : { phone, companyId },
+  // Only a genuinely new row is a new signup — the returning-visitor and
+  // existing-phone branches resolve to an already-registered person, so
+  // firing there would double-report the same customer.
+  if (result.created) {
+    scheduleEvent(
+      companyId,
+      offerId ?? null,
+      "registration.created",
+      {
+        registration: {
+          id: result.id,
+          name,
+          phone,
+          extraFields,
+          createdAt: result.createdAt ?? Date.now(),
         },
       },
-    });
-    const prev = afterRace.spins[0];
-    if (prev?.token) {
-      return { ok: true, token: prev.token, loginUrl: buildLoginUrl(prev.token, companySlug, offerId) };
-    }
-    return { ok: false, status: 500, error: "server_error", message: "Something went wrong. Please try again." };
+    );
   }
 
-  // Only this path is a genuinely new signup — the returning-visitor and
-  // existing-phone branches above all resolve to an already-registered
-  // person, so firing there would double-report the same customer.
-  scheduleEvent(companyId, "registration.created", {
-    registration: { id: spinId, name, phone, extraFields, createdAt },
-  });
-
-  return { ok: true, token, loginUrl: buildLoginUrl(token, companySlug, offerId) };
+  return {
+    ok: true,
+    token: result.token,
+    loginUrl: buildLoginUrl(result.token, companySlug, offerId),
+  };
 }

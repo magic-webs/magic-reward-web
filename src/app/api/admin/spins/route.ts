@@ -1,31 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { init } from "@instantdb/admin";
-import schema from "@/instant.schema";
 import { isAdminRequestAuthenticated } from "@/lib/adminAuth";
-
-const adminDb = init({
-  appId: process.env.NEXT_PUBLIC_INSTANT_APP_ID!,
-  adminToken: process.env.INSTANT_APP_ADMIN_TOKEN!,
-  schema,
-});
+import { api, convex } from "@/lib/convex";
 
 export async function GET(req: NextRequest) {
   if (!isAdminRequestAuthenticated(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { spins } = await adminDb.query({
-    spins: { $: { order: { createdAt: "desc" } } },
-  });
-
-  return NextResponse.json({
-    spins: spins.map((s) => ({
-      id: s.id,
-      name: s.name,
-      phone: s.phone,
-      prizeId: s.prizeId ?? null,
-      prizeLabel: s.prizeLabel ?? null,
-      createdAt: s.createdAt,
-    })),
-  });
+  return NextResponse.json({ spins: await convex.query(api.spins.listAll, {}) });
 }

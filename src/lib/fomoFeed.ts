@@ -1,4 +1,4 @@
-import { adminDb } from "@/lib/companies";
+import { api, asCompanyId, asOfferId, convex } from "@/lib/convex";
 import {
   FOMO_TYPES,
   anonymizeName,
@@ -100,19 +100,25 @@ export async function buildFomoFeed({
     ];
     const oldest = now - Math.max(...windows) * 3600_000;
 
-    const where = offerId
-      ? { offerId, createdAt: { $gt: oldest } }
-      : { companyId, createdAt: { $gt: oldest } };
+    // Instant filtered and limited server-side in the query; the Convex
+    // equivalents read the offer's (or company's) spins by index and the
+    // window is applied here.
+    const rows = offerId
+      ? await convex.query(api.spins.recentWins, { offerId: asOfferId(offerId), limit: 200 })
+      : (await convex.query(api.spins.listByCompany, { companyId: asCompanyId(companyId) }))
+          .slice(0, 200)
+          .map((s) => ({ name: s.name, prizeLabel: s.prizeLabel, createdAt: s.createdAt }));
 
-    const result = await adminDb.query({
-      spins: { $: { where, order: { createdAt: "desc" as const }, limit: 200 } },
-    });
-    spins = (result.spins ?? []).map((s) => ({
-      id: s.id,
-      name: s.name,
-      prizeLabel: s.prizeLabel,
-      createdAt: s.createdAt,
-    }));
+    spins = rows
+      .filter((s) => s.createdAt > oldest)
+      .map((s, index) => ({
+        // The feed only ever renders name/prize/time; an index is enough of
+        // a react key and avoids carrying row ids to the client.
+        id: `f${index}`,
+        name: s.name,
+        prizeLabel: s.prizeLabel ?? undefined,
+        createdAt: s.createdAt,
+      }));
   }
 
   const groups: FomoItem[][] = [];

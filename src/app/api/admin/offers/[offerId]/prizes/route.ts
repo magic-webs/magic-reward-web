@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { id as generateId } from "@instantdb/admin";
-import { adminDb, getOfferWithDetails, resolveCompanyAccess } from "@/lib/companies";
+import { asOfferId, resolveCompanyAccess } from "@/lib/companies";
+import { api, asPrizeId, convex } from "@/lib/convex";
 
 interface PrizeInput {
   id?: string;
@@ -12,7 +12,8 @@ interface PrizeInput {
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
-  const offer = await getOfferWithDetails(offerId);
+
+  const offer = await convex.query(api.offers.getConfigs, { offerId: asOfferId(offerId) });
   if (!offer) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -41,28 +42,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
     );
   }
 
-  const existingIds = new Set((offer.prizes ?? []).map((p) => p.id));
-  const keptIds = new Set(cleaned.filter((p) => p.id).map((p) => p.id!));
-  const toDelete = [...existingIds].filter((existingId) => !keptIds.has(existingId));
+  await convex.mutation(api.prizes.replaceForOffer, {
+    offerId: asOfferId(offerId),
+    companyId: offer.companyId,
+    prizes: cleaned.map((p) => ({ ...p, id: p.id ? asPrizeId(p.id) : undefined })),
+  });
 
-  const txs = [
-    ...toDelete.map((existingId) => adminDb.tx.prizes[existingId].delete()),
-    ...cleaned.map((p, order) => {
-      const prizeId = p.id ?? generateId();
-      const update = adminDb.tx.prizes[prizeId].update({
-        label: p.label,
-        weight: p.weight,
-        isWin: p.isWin,
-        color: p.color,
-        order,
-        offerId,
-        companyId: offer.companyId,
-        ...(p.id ? {} : { createdAt: Date.now() }),
-      });
-      return p.id ? update : update.link({ offer: offerId }).link({ company: offer.companyId });
-    }),
-  ];
-
-  await adminDb.transact(txs);
   return NextResponse.json({ ok: true });
 }

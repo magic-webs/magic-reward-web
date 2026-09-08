@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, getOfferWithDetails, resolveCompanyAccess, toFormField } from "@/lib/companies";
+import { asOfferId, resolveCompanyAccess, toFormField } from "@/lib/companies";
+import { api, convex } from "@/lib/convex";
 import { normalizeFomoConfig } from "@/lib/fomo";
 import { normalizeEmbedConfig } from "@/lib/embed";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
-  const offer = await getOfferWithDetails(offerId);
+  const offer = await convex.query(api.offers.getWithDetails, { offerId: asOfferId(offerId) });
   if (!offer) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -18,44 +19,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ offe
     id: offer.id,
     title: offer.title,
     type: offer.type,
-    event: offer.event ?? "none",
+    event: offer.event,
     isActive: offer.isActive,
     askName: offer.askName,
     askPhone: offer.askPhone,
-    wheelImageUrl: offer.wheelImage?.url ?? null,
-    bgImageUrl: offer.bgImage?.url ?? null,
-    pinImageUrl: offer.pinImage?.url ?? null,
+    wheelImageUrl: offer.wheelImageUrl,
+    bgImageUrl: offer.bgImageUrl,
+    pinImageUrl: offer.pinImageUrl,
     // Normalized on the way out as well as in, so an offer created before
     // these fields existed still hands the admin a complete object to edit.
     fomoConfig: normalizeFomoConfig(offer.fomoConfig),
     embedConfig: normalizeEmbedConfig(offer.embedConfig),
-    prizes: (offer.prizes ?? [])
-      .slice()
-      .sort((a, b) => a.order - b.order)
-      .map((p) => ({
-        id: p.id,
-        label: p.label,
-        weight: p.weight,
-        color: p.color ?? null,
-        order: p.order,
-        isWin: p.isWin,
-        iconUrl: p.icon?.url ?? null,
-      })),
-    fields: (offer.formFields ?? [])
-      .slice()
-      .sort((a, b) => a.order - b.order)
-      .map((f) => ({
-        ...toFormField(f),
-        order: f.order,
-      })),
+    prizes: offer.prizes,
+    fields: offer.fields.map((f) => ({ ...toFormField(f), order: f.order })),
   });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
-  
-  const { offers } = await adminDb.query({ offers: { $: { where: { id: offerId } } } });
-  const offer = offers[0];
+
+  const offer = await convex.query(api.offers.getConfigs, { offerId: asOfferId(offerId) });
   if (!offer) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -65,7 +48,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
   }
 
   const body = await req.json().catch(() => null);
-  const patch: Record<string, any> = {};
+
+  // Only fields actually present are sent: the mutation treats an absent
+  // one as "leave alone", matching how this route always behaved.
+  const patch: Record<string, unknown> = {};
   if (typeof body?.title === "string" && body.title.trim()) patch.title = body.title.trim();
   if (typeof body?.type === "string") patch.type = body.type;
   if (typeof body?.event === "string") patch.event = body.event;
@@ -78,15 +64,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
   if (body?.fomoConfig) patch.fomoConfig = normalizeFomoConfig(body.fomoConfig);
   if (body?.embedConfig) patch.embedConfig = normalizeEmbedConfig(body.embedConfig);
 
-  await adminDb.transact(adminDb.tx.offers[offerId].update(patch));
+  await convex.mutation(api.offers.update, { offerId: asOfferId(offerId), ...patch });
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
-  
-  const { offers } = await adminDb.query({ offers: { $: { where: { id: offerId } } } });
-  const offer = offers[0];
+
+  const offer = await convex.query(api.offers.getConfigs, { offerId: asOfferId(offerId) });
   if (!offer) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -95,6 +80,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ o
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  await adminDb.transact(adminDb.tx.offers[offerId].delete());
+  // Convex has no cascade, so offers.remove clears the offer's prizes,
+  // questions, webhooks and artwork itself — and unlinks its spins rather
+  // than deleting them, so registration history survives.
+  await convex.mutation(api.offers.remove, { offerId: asOfferId(offerId) });
   return NextResponse.json({ ok: true });
 }

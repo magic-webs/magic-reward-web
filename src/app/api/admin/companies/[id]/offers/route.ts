@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { id as generateId } from "@instantdb/admin";
-import { adminDb, resolveCompanyAccess } from "@/lib/companies";
+import { asCompanyId, resolveCompanyAccess } from "@/lib/companies";
+import { api, convex } from "@/lib/convex";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: companyId } = await params;
@@ -8,16 +8,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { companies } = await adminDb.query({
-    companies: {
-      $: { where: { id: companyId } },
-      offers: {
-        $: { order: { createdAt: "desc" } }
-      }
-    }
+  const offers = await convex.query(api.offers.listByCompany, {
+    companyId: asCompanyId(companyId),
   });
-
-  return NextResponse.json({ offers: companies[0]?.offers ?? [] });
+  return NextResponse.json({ offers });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -38,21 +32,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  const offerId = generateId();
+  // Created inactive — see the note on offers.create.
+  const offer = await convex.mutation(api.offers.create, {
+    companyId: asCompanyId(companyId),
+    title,
+    type,
+    event,
+  });
 
-  await adminDb.transact([
-    adminDb.tx.offers[offerId].update({
-      title,
-      type,
-      event,
-      isActive: false, // Inactive by default, merchant will activate it manually
-      askName: true,
-      askPhone: true,
-      createdAt: Date.now(),
-      companyId,
-    }),
-    adminDb.tx.offers[offerId].link({ company: companyId })
-  ]);
-
-  return NextResponse.json({ offer: { id: offerId, title, type, event, isActive: false } });
+  return NextResponse.json({ offer });
 }

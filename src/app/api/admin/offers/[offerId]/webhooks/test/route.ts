@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, resolveCompanyAccess } from "@/lib/companies";
+import { asOfferId, resolveCompanyAccess } from "@/lib/companies";
+import { api, asWebhookId, convex } from "@/lib/convex";
 import {
   buildSampleEnvelope,
   deliverWebhook,
   isValidWebhookUrl,
   isWebhookEventId,
-  listWebhooks,
+  listOfferWebhooks,
   type WebhookEventId,
 } from "@/lib/webhooks";
 
@@ -14,14 +15,19 @@ import {
 // headers and body. Accepts a raw `url` (so an endpoint can be tried
 // before it's ever saved) and, optionally, the id of a saved endpoint to
 // sign with its real secret and record the outcome against.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id: companyId } = await params;
-  if (!(await resolveCompanyAccess(req, companyId))) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
+  const { offerId } = await params;
+
+  const offer = await convex.query(api.offers.getConfigs, { offerId: asOfferId(offerId) });
+  if (!offer) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  if (!(await resolveCompanyAccess(req, offer.companyId))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { companies } = await adminDb.query({ companies: { $: { where: { id: companyId } } } });
-  const company = companies[0];
+  const company = await convex.query(api.companies.getById, { companyId: offer.companyId });
   if (!company) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -41,7 +47,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // An unsaved endpoint has no secret yet, so sign with a throwaway one —
   // the receiver can't verify it, but the round trip still proves the URL
   // is reachable and shows exactly what it returns.
-  const saved = webhookId ? (await listWebhooks(companyId)).find((w) => w.id === webhookId) : undefined;
+  const saved = webhookId
+    ? (await listOfferWebhooks(offerId)).find((w) => w.id === webhookId)
+    : undefined;
   const secret = saved?.secret ?? "whsec_unsaved-endpoint-test";
 
   const envelope = buildSampleEnvelope(event, {
@@ -52,13 +60,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const result = await deliverWebhook({ url, secret, envelope });
 
   if (saved) {
-    await adminDb.transact(
-      adminDb.tx.webhooks[saved.id].update({
-        lastStatus: result.status ?? 0,
-        lastError: result.error ?? "",
-        lastAttemptAt: Date.now(),
-      }),
-    );
+    await convex.mutation(api.webhooks.recordDelivery, {
+      webhookId: asWebhookId(saved.id),
+      lastStatus: result.status ?? 0,
+      lastError: result.error ?? "",
+      lastAttemptAt: Date.now(),
+    });
   }
 
   return NextResponse.json({ result, sentPayload: envelope });
