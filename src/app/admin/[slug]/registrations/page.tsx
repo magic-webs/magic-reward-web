@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, Users, X } from "lucide-react";
+import { Download, Search, Users, X } from "lucide-react";
 import { SiteHeader } from "@/components/admin/site-header";
 import { DatePickerField } from "@/components/admin/date-picker-field";
 import {
@@ -39,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useCompany, useCompanyCrumbs } from "../company-context";
+import { CSV_BOM, registrationsCsv, registrationsFilename } from "@/lib/csv";
 
 type SpinRow = {
   id: string;
@@ -47,6 +48,7 @@ type SpinRow = {
   prizeLabel: string | null;
   extraFields: Record<string, string>;
   createdAt: number;
+  offerTitle?: string | null;
 };
 
 const ALL_PRIZES = "__all__";
@@ -87,6 +89,20 @@ export default function RegistrationsPage() {
     setDateTo("");
   }
 
+  // Exports every registration rather than the filtered view — the table
+  // is for looking things up, the export is for taking the data away.
+  function exportCsv() {
+    if (!spins || spins.length === 0) return;
+
+    const csv = CSV_BOM + registrationsCsv(spins, company.fields);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = registrationsFilename(company.slug);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   const filteredSpins = useMemo(() => {
     if (!spins) return [];
     const query = search.trim().toLowerCase();
@@ -115,15 +131,22 @@ export default function RegistrationsPage() {
       <SiteHeader crumbs={crumbs} />
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Registrations</CardTitle>
-            <CardDescription>
-              {spins
-                ? hasActiveFilters
-                  ? `Showing ${filteredSpins.length} of ${spins.length} registered (${spunCount} spun)`
-                  : `${spunCount} spun / ${spins.length} registered`
-                : "Loading…"}
-            </CardDescription>
+          <CardHeader className="flex-row items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <CardTitle>Registrations</CardTitle>
+              <CardDescription>
+                {spins
+                  ? hasActiveFilters
+                    ? `Showing ${filteredSpins.length} of ${spins.length} registered (${spunCount} spun)`
+                    : `${spunCount} spun / ${spins.length} registered`
+                  : "Loading…"}
+              </CardDescription>
+            </div>
+            {spins && spins.length > 0 && (
+              <Button variant="outline" size="sm" onClick={exportCsv}>
+                <Download /> Export CSV
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {spins === null ? (
