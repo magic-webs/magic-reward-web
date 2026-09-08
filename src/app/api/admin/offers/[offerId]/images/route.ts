@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asOfferId, resolveCompanyAccess } from "@/lib/companies";
 import { api, convex } from "@/lib/convex";
-import { uploadToStorage } from "@/lib/uploadImage";
+import { resolveStorageId } from "@/lib/uploadImage";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
@@ -23,14 +23,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ off
     );
   }
 
-  const form = await req.formData().catch(() => null);
-  const file = form?.get("file");
-  if (!(file instanceof File)) {
+  const storageId = await resolveStorageId(req);
+  if (!storageId) {
     return NextResponse.json({ error: "invalid_input", message: "No file provided." }, { status: 400 });
   }
 
-  const storageId = await uploadToStorage(file);
-  await convex.mutation(api.offers.setImage, { offerId: asOfferId(offerId), kind, storageId });
+  // The admin UI swaps the preview in from this url, so hand back the one the
+  // mutation resolved rather than making the page refetch the whole offer.
+  const result = await convex.mutation(api.offers.setImage, {
+    offerId: asOfferId(offerId),
+    kind,
+    storageId,
+  });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, url: result?.url ?? null });
 }
