@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { id } from "@instantdb/admin";
 import { adminDb } from "@/lib/companies";
 import { buildLoginUrl } from "@/lib/siteUrl";
-import { scheduleWebhookEvent } from "@/lib/webhooks";
+import { scheduleEvent } from "@/lib/notify";
 import { validateFieldAnswer, type FormFieldType } from "@/lib/formFields";
 
 const PHONE_RE = /^[0-9+][0-9\s-]{6,14}$/;
@@ -133,7 +133,7 @@ export async function registerSpin(input: RegisterSpinInput): Promise<RegisterSp
   // Only this path is a genuinely new signup — the returning-visitor and
   // existing-phone branches above all resolve to an already-registered
   // person, so firing there would double-report the same customer.
-  scheduleWebhookEvent(companyId, "registration.created", {
+  scheduleEvent(companyId, "registration.created", {
     registration: { id: spinId, name, phone, extraFields, createdAt },
   });
 

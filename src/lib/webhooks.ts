@@ -1,5 +1,4 @@
 import { createHmac, randomBytes } from "crypto";
-import { after } from "next/server";
 import { adminDb } from "@/lib/companies";
 import {
   buildSamplePayload,
@@ -217,22 +216,5 @@ export async function dispatchWebhookEvent(
     );
   } catch {
     // Delivery is strictly best-effort — never surface it to the caller.
-  }
-}
-
-// Queues an event to go out *after* the response has been sent, so a slow
-// or unreachable receiver never adds latency to a customer registering or
-// spinning. Falls back to a floating promise if we're somehow outside a
-// request scope, where `after` isn't available.
-export function scheduleWebhookEvent(
-  companyId: string,
-  event: WebhookEventId,
-  data: WebhookEnvelope["data"],
-): void {
-  const run = () => dispatchWebhookEvent(companyId, event, data);
-  try {
-    after(run);
-  } catch {
-    void run();
   }
 }

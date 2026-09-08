@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, getDefaultCompany } from "@/lib/companies";
 import { drawWeightedPrize, type WheelPrize } from "@/lib/wheel";
-import { scheduleWebhookEvent } from "@/lib/webhooks";
+import { scheduleEvent } from "@/lib/notify";
 
 // The spin itself is identified purely by the token from /api/register —
 // the name and phone are already on file, so nothing re-enters them here.
@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
     },
     prize: { id: prize.id, label: prize.label, isWin: prize.isWin },
   };
-  scheduleWebhookEvent(companyId, "spin.completed", eventData);
-  scheduleWebhookEvent(companyId, prize.isWin ? "prize.won" : "prize.lost", eventData);
+  scheduleEvent(companyId, "spin.completed", eventData);
+  scheduleEvent(companyId, prize.isWin ? "prize.won" : "prize.lost", eventData);
 
   return NextResponse.json({
     alreadySpun: false,

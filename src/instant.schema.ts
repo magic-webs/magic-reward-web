@@ -95,6 +95,30 @@ const _schema = i.schema({
       lastError: i.string().optional(),
       lastAttemptAt: i.number().optional(),
     }),
+    // One installed app on one device, as far as push is concerned. Keyed
+    // by the Expo push token, which is what the Expo push service accepts;
+    // it can change on reinstall, so the app re-registers on every launch
+    // and dead tokens are pruned from delivery receipts (see lib/push.ts).
+    deviceTokens: i.entity({
+      token: i.string().unique().indexed(),
+      // Which login this device registered under. "admin" devices hear
+      // about every company; "company" devices only about their own.
+      role: i.string().indexed(),
+      // Set for role "company", absent for "admin".
+      companyId: i.string().indexed().optional(),
+      // string[] of WEBHOOK_EVENT ids this device wants (same catalog the
+      // webhooks entity uses). JSON for the same reason: a small closed
+      // set always read and written together.
+      events: i.json(),
+      // "ios" | "android" | "web" — only used to label the device in the
+      // dashboard, never to branch delivery.
+      platform: i.string().optional(),
+      deviceName: i.string().optional(),
+      createdAt: i.number().indexed(),
+      // Refreshed on every re-register, so a device that has not opened
+      // the app in months can be identified.
+      lastSeenAt: i.number().indexed(),
+    }),
     formFields: i.entity({
       label: i.string(),
       // Stable slug derived from the label at creation time, used as the
