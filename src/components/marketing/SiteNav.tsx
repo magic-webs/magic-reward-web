@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
+import { SiteThemeToggle } from "@/components/marketing/SiteThemeToggle";
 import { navLinks, product } from "@/lib/siteConfig";
 
 export function SiteNav() {
@@ -20,13 +21,13 @@ export function SiteNav() {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
-        scrolled ? "border-b border-white/10 bg-[#0a0a0a]/85 backdrop-blur-xl" : "border-b border-transparent"
+        scrolled ? "border-b border-(--site-fg)/10 bg-(--site-bg)/85 backdrop-blur-xl" : "border-b border-transparent"
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
         <Link href="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
           <Image src="/logo-mark.png" alt="" width={32} height={32} className="size-8" priority />
-          <span className="font-heading text-[15px] font-semibold tracking-tight text-white">
+          <span className="font-heading text-[15px] font-semibold tracking-tight text-(--site-fg)">
             {product.name}
           </span>
         </Link>
@@ -36,48 +37,50 @@ export function SiteNav() {
             <a
               key={link.href}
               href={link.href}
-              className="text-sm text-white/60 transition-colors hover:text-white"
+              className="text-sm text-(--site-muted) transition-colors hover:text-(--site-fg)"
             >
               {link.label}
             </a>
           ))}
         </div>
 
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="ml-auto flex items-center gap-2">
+          <SiteThemeToggle />
+
           <Link
             href="/admin"
-            className="rounded-full px-4 py-2 text-sm font-medium text-white/70 transition-colors hover:text-white"
+            className="hidden rounded-full px-4 py-2 text-sm font-medium text-(--site-soft) transition-colors hover:text-(--site-fg) md:inline-flex"
           >
             Sign in
           </Link>
           <Link
             href="/admin"
-            className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#0a0a0a] transition-colors hover:bg-emerald-400"
+            className="hidden rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#0a0a0a] transition-colors hover:bg-emerald-400 md:inline-flex"
           >
             Open dashboard
           </Link>
-        </div>
 
-        <button
-          type="button"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-          className="ml-auto rounded-lg p-2 text-white/80 md:hidden"
-        >
-          {open ? <X className="size-5" /> : <Menu className="size-5" />}
-        </button>
+          <button
+            type="button"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-lg p-2 text-(--site-soft) md:hidden"
+          >
+            {open ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
+        </div>
       </nav>
 
       {open && (
-        <div className="border-t border-white/10 bg-[#0a0a0a]/95 px-5 py-4 backdrop-blur-xl md:hidden">
+        <div className="border-t border-(--site-fg)/10 bg-(--site-bg)/95 px-5 py-4 backdrop-blur-xl md:hidden">
           <div className="flex flex-col gap-1">
             {navLinks.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-2 py-2.5 text-sm text-white/70 hover:bg-white/5 hover:text-white"
+                className="rounded-lg px-2 py-2.5 text-sm text-(--site-soft) hover:bg-(--site-fg)/5 hover:text-(--site-fg)"
               >
                 {link.label}
               </a>

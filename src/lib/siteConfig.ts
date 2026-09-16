@@ -29,12 +29,18 @@ export const socialLinks = [
 
 export const product = {
   name: "Magic Reward",
-  tagline: "Spin-to-win campaigns that turn footfall into customers.",
+  tagline: "Play-to-win campaigns that turn footfall into customers.",
   description:
-    "Run branded prize wheels on any device. Set your own artwork, control the odds, collect the details you need, and watch every spin land in your dashboard in real time.",
+    "Run branded prize offers on any device — a wheel, a scratch card, a slot machine and more. Set your own artwork, control the odds, collect the details you need, and watch every play land in your dashboard in real time.",
+} as const;
+
+export const appLinks = {
+  /** Play Store listing for the companion Android app. */
+  android: "https://play.google.com/store/apps/details?id=ai.magicwebs.reward",
 } as const;
 
 export const navLinks = [
+  { label: "Offers", href: "#offers" },
   { label: "Features", href: "#features" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Mobile app", href: "#mobile" },

@@ -42,45 +42,45 @@ export default function SupportPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <a
             href={`mailto:${legalEntity.supportEmail}`}
-            className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-colors hover:border-white/25 hover:bg-white/[0.04]"
+            className="flex items-start gap-3 rounded-xl border border-(--site-fg)/10 bg-(--site-fg)/[0.02] p-4 transition-colors hover:border-(--site-fg)/25 hover:bg-(--site-fg)/[0.04]"
           >
-            <Mail className="mt-0.5 size-4 shrink-0 text-emerald-400" strokeWidth={1.5} />
+            <Mail className="mt-0.5 size-4 shrink-0 text-(--site-accent)" strokeWidth={1.5} />
             <span>
-              <span className="block text-sm font-medium text-white/85">Email support</span>
-              <span className="block text-sm text-white/50">{legalEntity.supportEmail}</span>
+              <span className="block text-sm font-medium text-(--site-soft)">Email support</span>
+              <span className="block text-sm text-(--site-muted)">{legalEntity.supportEmail}</span>
             </span>
           </a>
           <a
             href={`tel:${legalEntity.phone}`}
-            className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-colors hover:border-white/25 hover:bg-white/[0.04]"
+            className="flex items-start gap-3 rounded-xl border border-(--site-fg)/10 bg-(--site-fg)/[0.02] p-4 transition-colors hover:border-(--site-fg)/25 hover:bg-(--site-fg)/[0.04]"
           >
-            <Phone className="mt-0.5 size-4 shrink-0 text-emerald-400" strokeWidth={1.5} />
+            <Phone className="mt-0.5 size-4 shrink-0 text-(--site-accent)" strokeWidth={1.5} />
             <span>
-              <span className="block text-sm font-medium text-white/85">Call us</span>
-              <span className="block text-sm text-white/50">{legalEntity.phoneDisplay}</span>
+              <span className="block text-sm font-medium text-(--site-soft)">Call us</span>
+              <span className="block text-sm text-(--site-muted)">{legalEntity.phoneDisplay}</span>
             </span>
           </a>
           <Link
             href="/delete-account"
-            className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-colors hover:border-white/25 hover:bg-white/[0.04] sm:col-span-2"
+            className="flex items-start gap-3 rounded-xl border border-(--site-fg)/10 bg-(--site-fg)/[0.02] p-4 transition-colors hover:border-(--site-fg)/25 hover:bg-(--site-fg)/[0.04] sm:col-span-2"
           >
-            <Trash2 className="mt-0.5 size-4 shrink-0 text-emerald-400" strokeWidth={1.5} />
+            <Trash2 className="mt-0.5 size-4 shrink-0 text-(--site-accent)" strokeWidth={1.5} />
             <span>
-              <span className="block text-sm font-medium text-white/85">Delete your data</span>
-              <span className="block text-sm text-white/50">Request account and data removal</span>
+              <span className="block text-sm font-medium text-(--site-soft)">Delete your data</span>
+              <span className="block text-sm text-(--site-muted)">Request account and data removal</span>
             </span>
           </Link>
         </div>
         <div className="flex items-start gap-3 pt-2">
-          <MapPin className="mt-0.5 size-4 shrink-0 text-white/35" strokeWidth={1.5} />
+          <MapPin className="mt-0.5 size-4 shrink-0 text-(--site-faint)" strokeWidth={1.5} />
           <div className="space-y-3">
             <p>
-              <span className="text-white/85">{legalEntity.name}</span>
+              <span className="text-(--site-soft)">{legalEntity.name}</span>
               <br />
               {legalEntity.address}
             </p>
             <p>
-              <span className="text-white/85">Delhi office</span>
+              <span className="text-(--site-soft)">Delhi office</span>
               <br />
               {legalEntity.secondaryAddress}
             </p>
@@ -93,7 +93,7 @@ export default function SupportPage() {
         <div className="space-y-5">
           {faqs.map((faq) => (
             <div key={faq.q}>
-              <h3 className="text-sm font-semibold text-white/85">{faq.q}</h3>
+              <h3 className="text-sm font-semibold text-(--site-soft)">{faq.q}</h3>
               <p className="mt-1.5">{faq.a}</p>
             </div>
           ))}

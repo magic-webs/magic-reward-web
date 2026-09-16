@@ -190,7 +190,70 @@
   }
 }
 /* ── Marketing site ─────────────────────────────────────────────────────
-   Scroll-reveal starts hidden in CSS rather than inline so the content is
+   The public site carries its own small palette rather than the shadcn
+   tokens the dashboard uses: it is laid out as one continuous surface with
+   hairline rules and tinted panels, which the semantic card/popover tokens
+   do not describe. Every value is defined once here and inverted below, so
+   the site follows the theme toggle without any `dark:` variant in the JSX.
+
+   The text tiers are named rather than expressed as an alpha on the
+   foreground, because the alpha that reads well on near-black is too light
+   on white — `--site-muted` is 56% white in the dark and 65% black in the
+   light for the same perceived weight. Borders and panel fills do scale as
+   a plain alpha on `--site-fg`, since they are decorative and invert
+   symmetrically. */
+.site-surface {
+  --site-bg: #0a0a0a;
+  --site-panel: #111111;
+  --site-fg: #ffffff;
+  --site-soft: rgba(255, 255, 255, 0.78);
+  --site-muted: rgba(255, 255, 255, 0.56);
+  --site-faint: rgba(255, 255, 255, 0.38);
+  --site-accent: #34d399;
+  --site-accent-strong: #6ee7b7;
+  --site-accent-line: #10b981;
+  --site-shadow: rgba(0, 0, 0, 0.6);
+
+  /* Line work in the hero diagram, dimmest last. */
+  --site-glyph: rgba(255, 255, 255, 0.5);
+  --site-glyph-dim: rgba(255, 255, 255, 0.3);
+  --site-glyph-faint: rgba(255, 255, 255, 0.22);
+  --site-hairline: rgba(255, 255, 255, 0.14);
+  --site-tint: rgba(255, 255, 255, 0.02);
+
+  /* The lattice behind the sections. */
+  --site-line: rgba(255, 255, 255, 0.055);
+  --site-cell: 72px;
+
+  background-color: var(--site-bg);
+  color: var(--site-fg);
+}
+
+/* next-themes has `enableSystem` off and defaults to light, so the absence
+   of `.dark` is the light theme — including on the server-rendered markup
+   before its blocking script has run. */
+html:not(.dark) .site-surface {
+  --site-bg: #ffffff;
+  --site-panel: #f4f5f7;
+  --site-fg: #0a0a0a;
+  --site-soft: rgba(10, 10, 10, 0.72);
+  --site-muted: rgba(10, 10, 10, 0.65);
+  --site-faint: rgba(10, 10, 10, 0.58);
+  --site-accent: #047857;
+  --site-accent-strong: #065f46;
+  --site-accent-line: #059669;
+  --site-shadow: rgba(10, 10, 10, 0.18);
+
+  --site-glyph: rgba(10, 10, 10, 0.55);
+  --site-glyph-dim: rgba(10, 10, 10, 0.38);
+  --site-glyph-faint: rgba(10, 10, 10, 0.3);
+  --site-hairline: rgba(10, 10, 10, 0.18);
+  --site-tint: rgba(10, 10, 10, 0.03);
+
+  --site-line: rgba(10, 10, 10, 0.07);
+}
+
+/* Scroll-reveal starts hidden in CSS rather than inline so the content is
    still readable without JS, and stays put for anyone who asked for less
    motion. GSAP takes over from these values on the client. */
 .reveal,
